@@ -48,27 +48,13 @@ export const initialZones: Zone[] = [
     index: 3,
     name: 'Valve Junction',
     sensorId: 'PX-0398',
-    status: 'leak',
-    vibrationHz: 47.2,
+    status: 'safe',
+    vibrationHz: 13.1,
     batteryV: 3.41,
   },
 ]
 
 export const initialEvents: PipelineEvent[] = [
-  {
-    id: 'e-7',
-    timestamp: '2026-03-11 06:14:52',
-    level: 'alert',
-    zone: 'Zone 3',
-    message: 'LEAK DETECTED — vibration 47.2 Hz exceeds 35 Hz threshold',
-  },
-  {
-    id: 'e-6',
-    timestamp: '2026-03-11 06:14:49',
-    level: 'info',
-    zone: 'Zone 3',
-    message: 'Vibration anomaly rising — 31.6 Hz',
-  },
   {
     id: 'e-5',
     timestamp: '2026-03-11 06:02:10',

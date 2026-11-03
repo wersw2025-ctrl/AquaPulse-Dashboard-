@@ -1,21 +1,27 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   initialEvents,
   initialZones,
   type PipelineEvent,
   type Zone,
+  type ZoneStatus,
 } from '@/lib/pipeline-data'
 import { DashboardHeader } from './dashboard-header'
 import { ZoneCard } from './zone-card'
 import { EventLog } from './event-log'
 
-const MAX_EVENTS = 50
+const AIO_USERNAME = "Dani_tonga";
+const AIO_KEY = "PASTE_YOUR_ADAFRUIT_IO_KEY_HERE";
 
-function jitter(value: number, amount: number, min: number, max: number) {
-  const next = value + (Math.random() - 0.5) * amount
-  return Math.min(max, Math.max(min, next))
+const POLL_INTERVAL_MS = 4000
+const MAX_EVENTS = 50
+const AIO_FEEDS_URL = `https://io.adafruit.com/api/v2/${AIO_USERNAME}/feeds`
+
+type AdafruitFeed = {
+  key: string
+  last_value: string | null
 }
 
 function formatTimestamp(date: Date) {
@@ -25,52 +31,143 @@ function formatTimestamp(date: Date) {
   )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
+function createEvent(event: Omit<PipelineEvent, 'id' | 'timestamp'>): PipelineEvent {
+  return {
+    ...event,
+    id: `live-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    timestamp: formatTimestamp(new Date()),
+  }
+}
+
+function parseNumber(value: string | null | undefined) {
+  if (value == null) return undefined
+  const parsed = Number.parseFloat(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
 export function PipelineDashboard() {
   const [zones, setZones] = useState<Zone[]>(initialZones)
   const [events, setEvents] = useState<PipelineEvent[]>(initialEvents)
+  const previousStatus = useRef<Record<string, ZoneStatus>>(
+    Object.fromEntries(initialZones.map((z) => [z.id, z.status])),
+  )
+  const lastErrorMessage = useRef<string | null>(null)
+  const zonesRef = useRef<Zone[]>(initialZones)
 
   useEffect(() => {
-    const telemetry = setInterval(() => {
-      setZones((current) =>
-        current.map((zone) => ({
-          ...zone,
-          vibrationHz:
-            zone.status === 'leak'
-              ? jitter(zone.vibrationHz, 4, 40, 58)
-              : jitter(zone.vibrationHz, 1.5, 9, 18),
-          batteryV: jitter(zone.batteryV, 0.01, 3.3, 4.1),
-        })),
-      )
-    }, 2000)
+    const pushEvents = (newEvents: PipelineEvent[]) => {
+      if (newEvents.length === 0) return
+      setEvents((current) => [...newEvents, ...current].slice(0, MAX_EVENTS))
+    }
 
-    let counter = 0
-    const log = setInterval(() => {
-      counter += 1
-      const now = formatTimestamp(new Date())
-      setEvents((current) => {
-        const leakZone = initialZones.find((z) => z.status === 'leak')
-        const next: PipelineEvent =
-          counter % 3 === 0 && leakZone
-            ? {
-                id: `live-${Date.now()}`,
-                timestamp: now,
-                level: 'alert',
-                zone: `Zone ${leakZone.index}`,
-                message: 'Leak persists — dispatch crew notified',
-              }
-            : {
-                id: `live-${Date.now()}`,
-                timestamp: now,
-                level: 'info',
-                message: 'Heartbeat received — 3/3 nodes reporting',
-              }
-        return [next, ...current].slice(0, MAX_EVENTS)
-      })
-    }, 6000)
+    const reportError = (message: string) => {
+      if (lastErrorMessage.current === message) return
+      lastErrorMessage.current = message
+      pushEvents([createEvent({ level: 'alert', message })])
+    }
+
+    if (AIO_KEY === 'PASTE_YOUR_ADAFRUIT_IO_KEY_HERE') {
+      reportError('Adafruit IO key not configured — paste your AIO Key to go live')
+      return
+    }
+
+    let cancelled = false
+    let inFlight = false
+
+    const poll = async () => {
+      if (inFlight) return
+      inFlight = true
+      try {
+        // A single /feeds request returns every feed's last_value, which keeps
+        // polling well under the free-tier rate limit (30 requests/min).
+        const res = await fetch(AIO_FEEDS_URL, {
+          headers: { 'X-AIO-Key': AIO_KEY },
+          cache: 'no-store',
+        })
+        if (!res.ok) {
+          throw new Error(
+            res.status === 401 || res.status === 403
+              ? 'Adafruit IO rejected credentials — check username and AIO Key'
+              : res.status === 429
+                ? 'Adafruit IO rate limit reached — retrying'
+                : `Adafruit IO request failed (HTTP ${res.status})`,
+          )
+        }
+
+        const feeds = (await res.json()) as AdafruitFeed[]
+        if (cancelled) return
+
+        const feedValues = new Map(feeds.map((f) => [f.key, f.last_value]))
+
+        if (lastErrorMessage.current) {
+          lastErrorMessage.current = null
+          pushEvents([createEvent({ level: 'info', message: 'Adafruit IO connection restored' })])
+        }
+
+        const transitions: PipelineEvent[] = []
+
+        const nextZones = zonesRef.current.map((zone) => {
+            const prefix = `zone-${zone.index}`
+            const leakValue = feedValues.get(`${prefix}-leak`)
+            const battery = parseNumber(feedValues.get(`${prefix}-battery`))
+            const vibration = parseNumber(feedValues.get(`${prefix}-vibration`))
+
+            const status: ZoneStatus =
+              leakValue == null
+                ? zone.status
+                : leakValue.trim() === '1'
+                  ? 'leak'
+                  : 'safe'
+
+            const prev = previousStatus.current[zone.id]
+            if (prev !== status) {
+              previousStatus.current[zone.id] = status
+              transitions.push(
+                createEvent(
+                  status === 'leak'
+                    ? {
+                        level: 'alert',
+                        zone: `Zone ${zone.index}`,
+                        message: `LEAK DETECTED — ${zone.name} (${zone.sensorId})`,
+                      }
+                    : {
+                        level: 'info',
+                        zone: `Zone ${zone.index}`,
+                        message: `Status cleared — ${zone.name} reporting SAFE`,
+                      },
+                ),
+              )
+            }
+
+            return {
+              ...zone,
+              status,
+              batteryV: battery ?? zone.batteryV,
+              vibrationHz: vibration ?? zone.vibrationHz,
+            }
+          })
+
+        zonesRef.current = nextZones
+        setZones(nextZones)
+        pushEvents(transitions.reverse())
+      } catch (error) {
+        if (cancelled) return
+        reportError(
+          error instanceof Error && error.message.startsWith('Adafruit')
+            ? error.message
+            : 'Unable to reach Adafruit IO — check network connection',
+        )
+      } finally {
+        inFlight = false
+      }
+    }
+
+    poll()
+    const interval = setInterval(poll, POLL_INTERVAL_MS)
 
     return () => {
-      clearInterval(telemetry)
-      clearInterval(log)
+      cancelled = true
+      clearInterval(interval)
     }
   }, [])
 
