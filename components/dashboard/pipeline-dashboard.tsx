@@ -13,7 +13,7 @@ import { ZoneCard } from './zone-card'
 import { EventLog } from './event-log'
 
 const AIO_USERNAME = "Dani_tonga";
-const AIO_KEY = "PASTE_YOUR_ADAFRUIT_IO_KEY_HERE";
+const AIO_KEY = "aio_rnJg328EyVoH23MhQfS2vnyuhJyO";
 
 const POLL_INTERVAL_MS = 4000
 const MAX_EVENTS = 50
