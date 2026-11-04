@@ -143,7 +143,7 @@
 
 .dark {
   color-scheme: dark;
-  --background: oklch(0.145 0.02 262);
+  --background: oklch(0.115 0.018 262);
   --foreground: oklch(0.96 0.005 250);
   --card: oklch(0.2 0.022 262);
   --card-foreground: oklch(0.96 0.005 250);
@@ -162,7 +162,7 @@
   --input: oklch(1 0 0 / 10%);
   --ring: oklch(0.72 0.17 230 / 50%);
 
-  --surface: oklch(0.22 0.025 262 / 55%);
+  --surface: oklch(0.215 0.026 262 / 90%);
   --surface-border: oklch(1 0 0 / 8%);
   --safe: oklch(0.78 0.19 155);
   --safe-ink: oklch(0.82 0.17 155);
@@ -204,10 +204,9 @@
   .dark .surface {
     -webkit-backdrop-filter: blur(20px) saturate(140%);
     backdrop-filter: blur(20px) saturate(140%);
-    border-color: rgb(255 255 255 / 0.06);
+    border-color: rgb(255 255 255 / 0.08);
     box-shadow:
-      inset 0 1px 0 0 rgb(255 255 255 / 0.05),
-      0 0 0 1px rgb(255 255 255 / 0.02),
+      inset 0 1px 0 0 rgb(255 255 255 / 0.06),
       0 4px 24px rgb(0 0 0 / 0.4);
   }
 }
