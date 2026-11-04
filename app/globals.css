@@ -193,8 +193,8 @@
     background-color: var(--surface);
     border: 1px solid var(--surface-border);
     box-shadow:
-      0 1px 2px 0 oklch(0.3 0.03 260 / 4%),
-      0 8px 24px -12px oklch(0.3 0.03 260 / 10%);
+      0 1px 2px 0 rgb(15 23 42 / 0.03),
+      0 4px 20px rgb(0 0 0 / 0.03);
     transition:
       background-color 300ms ease-in-out,
       border-color 300ms ease-in-out,
@@ -204,9 +204,11 @@
   .dark .surface {
     -webkit-backdrop-filter: blur(20px) saturate(140%);
     backdrop-filter: blur(20px) saturate(140%);
+    border-color: rgb(255 255 255 / 0.06);
     box-shadow:
-      inset 0 1px 0 0 oklch(1 0 0 / 6%),
-      0 20px 40px -24px oklch(0 0 0 / 60%);
+      inset 0 1px 0 0 rgb(255 255 255 / 0.05),
+      0 0 0 1px rgb(255 255 255 / 0.02),
+      0 4px 24px rgb(0 0 0 / 0.4);
   }
 }
 
