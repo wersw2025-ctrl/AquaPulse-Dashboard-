@@ -66,7 +66,9 @@ export function StatusRing({ status }: { status: ZoneStatus }) {
         <g
           className={cn(
             'origin-center transition-colors duration-700',
-            isLeak ? 'animate-alert-pulse text-alert' : 'text-safe',
+            isLeak
+              ? 'animate-alert-pulse text-alert'
+              : 'text-safe dark:drop-shadow-[0_0_6px_color-mix(in_oklch,var(--safe)_60%,transparent)]',
           )}
         >
           <circle

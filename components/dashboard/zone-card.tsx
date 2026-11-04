@@ -32,7 +32,7 @@ function MetricTile({
   return (
     <div className="flex flex-col gap-3 rounded-xl bg-secondary p-3 transition-colors duration-300 hover:bg-accent">
       <dt className="flex items-center gap-2">
-        <span className="flex size-6 items-center justify-center rounded-md bg-card text-primary shadow-sm">
+        <span className="flex size-6 items-center justify-center rounded-md bg-card text-primary shadow-sm dark:bg-primary/15 dark:shadow-none">
           {icon}
         </span>
         <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">

@@ -138,6 +138,37 @@
   --safe-ink: oklch(0.5 0.13 160);
   --alert: oklch(0.66 0.21 27);
   --alert-ink: oklch(0.55 0.21 27);
+  --grid-line: oklch(0.3 0.03 260 / 4%);
+}
+
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.145 0.02 262);
+  --foreground: oklch(0.96 0.005 250);
+  --card: oklch(0.2 0.022 262);
+  --card-foreground: oklch(0.96 0.005 250);
+  --popover: oklch(0.19 0.022 262);
+  --popover-foreground: oklch(0.96 0.005 250);
+  --primary: oklch(0.72 0.17 230);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(1 0 0 / 4%);
+  --secondary-foreground: oklch(0.96 0.005 250);
+  --muted: oklch(1 0 0 / 4%);
+  --muted-foreground: oklch(0.7 0.018 255);
+  --accent: oklch(1 0 0 / 7%);
+  --accent-foreground: oklch(0.96 0.005 250);
+  --destructive: oklch(0.68 0.21 25);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 10%);
+  --ring: oklch(0.72 0.17 230 / 50%);
+
+  --surface: oklch(0.22 0.025 262 / 55%);
+  --surface-border: oklch(1 0 0 / 8%);
+  --safe: oklch(0.78 0.19 155);
+  --safe-ink: oklch(0.82 0.17 155);
+  --alert: oklch(0.68 0.22 25);
+  --alert-ink: oklch(0.76 0.17 25);
+  --grid-line: oklch(1 0 0 / 3.5%);
 }
 
 @layer base {
@@ -156,6 +187,13 @@
     box-shadow:
       0 1px 2px 0 oklch(0.3 0.03 260 / 4%),
       0 8px 24px -12px oklch(0.3 0.03 260 / 10%);
+  }
+  .dark .surface {
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    backdrop-filter: blur(20px) saturate(140%);
+    box-shadow:
+      inset 0 1px 0 0 oklch(1 0 0 / 6%),
+      0 20px 40px -24px oklch(0 0 0 / 60%);
   }
 }
 

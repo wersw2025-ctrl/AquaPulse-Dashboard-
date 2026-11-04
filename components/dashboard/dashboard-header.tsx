@@ -1,4 +1,5 @@
 import { TriangleAlert, Waves } from 'lucide-react'
+import { ThemeToggle } from './theme-toggle'
 
 export function DashboardHeader({ alertCount }: { alertCount: number }) {
   return (
@@ -40,6 +41,8 @@ export function DashboardHeader({ alertCount }: { alertCount: number }) {
           </span>
           SYSTEM ONLINE
         </span>
+        <span aria-hidden="true" className="mx-1 hidden h-5 w-px bg-surface-border sm:block" />
+        <ThemeToggle />
       </div>
     </header>
   )

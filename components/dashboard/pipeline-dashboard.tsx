@@ -182,7 +182,7 @@ export function PipelineDashboard() {
             alertCount > 0 ? 'bg-alert/[0.08]' : 'bg-safe/[0.07]'
           }`}
         />
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,oklch(0.3_0.03_260/4%)_1px,transparent_1px),linear-gradient(to_bottom,oklch(0.3_0.03_260/4%)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_75%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--grid-line)_1px,transparent_1px),linear-gradient(to_bottom,var(--grid-line)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_75%)]" />
       </div>
 
       <DashboardHeader alertCount={alertCount} />
