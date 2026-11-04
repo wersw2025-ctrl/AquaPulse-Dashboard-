@@ -176,7 +176,15 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground antialiased transition-colors duration-300 ease-in-out;
+  }
+  /* Base-layer default so any utility-level transition (transform, opacity, etc.) still wins. */
+  body *,
+  body *::before,
+  body *::after {
+    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, box-shadow;
+    transition-duration: 300ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
@@ -187,6 +195,11 @@
     box-shadow:
       0 1px 2px 0 oklch(0.3 0.03 260 / 4%),
       0 8px 24px -12px oklch(0.3 0.03 260 / 10%);
+    transition:
+      background-color 300ms ease-in-out,
+      border-color 300ms ease-in-out,
+      box-shadow 300ms ease-in-out,
+      backdrop-filter 300ms ease-in-out;
   }
   .dark .surface {
     -webkit-backdrop-filter: blur(20px) saturate(140%);
