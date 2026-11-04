@@ -56,6 +56,12 @@ export const initialZones: Zone[] = [
 
 export const initialEvents: PipelineEvent[] = [
   {
+    id: 'e-mock-alert',
+    timestamp: '2026-03-11 06:05:00',
+    level: 'alert',
+    message: 'Mock Zone 1 Moisture Spike Detected',
+  },
+  {
     id: 'e-5',
     timestamp: '2026-03-11 06:02:10',
     level: 'info',
