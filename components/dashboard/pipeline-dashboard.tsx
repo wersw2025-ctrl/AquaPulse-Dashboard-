@@ -176,13 +176,13 @@ export function PipelineDashboard() {
   return (
     <main className="relative mx-auto flex min-h-dvh w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 sm:py-8 lg:gap-6 lg:px-8">
       <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-40 left-1/2 h-96 w-[48rem] -translate-x-1/2 rounded-full bg-safe/[0.06] blur-3xl" />
+        <div className="absolute -top-40 left-1/2 h-96 w-[48rem] -translate-x-1/2 rounded-full bg-primary/[0.07] blur-3xl" />
         <div
           className={`absolute -bottom-40 right-0 h-96 w-[36rem] rounded-full blur-3xl transition-colors duration-1000 ${
-            alertCount > 0 ? 'bg-alert/[0.08]' : 'bg-sky-500/[0.05]'
+            alertCount > 0 ? 'bg-alert/[0.08]' : 'bg-safe/[0.07]'
           }`}
         />
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,oklch(1_0_0/3%)_1px,transparent_1px),linear-gradient(to_bottom,oklch(1_0_0/3%)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_75%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,oklch(0.3_0.03_260/4%)_1px,transparent_1px),linear-gradient(to_bottom,oklch(0.3_0.03_260/4%)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_75%)]" />
       </div>
 
       <DashboardHeader alertCount={alertCount} />

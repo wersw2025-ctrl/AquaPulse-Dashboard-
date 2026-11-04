@@ -19,8 +19,8 @@ export function StatusRing({ status }: { status: ZoneStatus }) {
       <span
         aria-hidden="true"
         className={cn(
-          'absolute inset-6 rounded-full blur-2xl transition-all duration-700',
-          isLeak ? 'bg-alert/25' : 'bg-safe/[0.07]',
+          'absolute inset-5 rounded-full transition-colors duration-700',
+          isLeak ? 'bg-alert/[0.08]' : 'bg-safe/[0.06]',
         )}
       />
 
@@ -28,11 +28,11 @@ export function StatusRing({ status }: { status: ZoneStatus }) {
         <>
           <span
             aria-hidden="true"
-            className="absolute inset-4 animate-ring-ping rounded-full border border-alert/70"
+            className="absolute inset-4 animate-ring-ping rounded-full border-2 border-alert/60"
           />
           <span
             aria-hidden="true"
-            className="absolute inset-4 animate-ring-ping rounded-full border border-alert/50 [animation-delay:0.9s]"
+            className="absolute inset-4 animate-ring-ping rounded-full border border-alert/40 [animation-delay:0.9s]"
           />
         </>
       )}
@@ -53,12 +53,20 @@ export function StatusRing({ status }: { status: ZoneStatus }) {
           ))}
         </g>
 
-        <circle cx="70" cy="70" r={RADIUS} fill="none" stroke="currentColor" strokeWidth="1" className="text-foreground/[0.08]" />
+        <circle
+          cx="70"
+          cy="70"
+          r={RADIUS}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="5"
+          className="text-foreground/[0.06]"
+        />
 
         <g
           className={cn(
             'origin-center transition-colors duration-700',
-            isLeak ? 'animate-crimson-pulse text-alert' : 'text-safe drop-shadow-[0_0_4px_var(--safe)]',
+            isLeak ? 'animate-alert-pulse text-alert' : 'text-safe',
           )}
         >
           <circle
@@ -67,7 +75,7 @@ export function StatusRing({ status }: { status: ZoneStatus }) {
             r={RADIUS}
             fill="none"
             stroke="currentColor"
-            strokeWidth={isLeak ? 3 : 1.75}
+            strokeWidth={isLeak ? 5 : 4}
             strokeLinecap="round"
             strokeDasharray={
               isLeak ? `${CIRCUMFERENCE * 0.06} ${CIRCUMFERENCE * 0.0233}` : `${CIRCUMFERENCE} 0`
@@ -78,39 +86,48 @@ export function StatusRing({ status }: { status: ZoneStatus }) {
         </g>
 
         {!isLeak && (
-          <g className="origin-center animate-ring-scan text-safe">
+          <g className="origin-center animate-ring-scan text-safe-ink">
             <circle
               cx="70"
               cy="70"
               r={RADIUS}
               fill="none"
               stroke="currentColor"
-              strokeWidth="3.5"
+              strokeWidth="5"
               strokeLinecap="round"
-              strokeDasharray={`${CIRCUMFERENCE * 0.04} ${CIRCUMFERENCE}`}
-              className="drop-shadow-[0_0_6px_var(--safe)]"
+              strokeDasharray={`${CIRCUMFERENCE * 0.05} ${CIRCUMFERENCE}`}
             />
           </g>
         )}
       </svg>
 
-      <div key={status} className="relative flex flex-col items-center gap-2 text-center animate-in fade-in zoom-in-95 duration-500">
+      {isLeak && (
+        <span aria-hidden="true" className="absolute right-[13%] top-[13%] flex size-3.5">
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-alert opacity-80" />
+          <span className="relative inline-flex size-3.5 rounded-full border-2 border-card bg-alert" />
+        </span>
+      )}
+
+      <div
+        key={status}
+        className="relative flex flex-col items-center gap-2 text-center animate-in fade-in zoom-in-95 duration-500"
+      >
         <span
           className={cn(
-            'flex size-9 items-center justify-center rounded-full border',
-            isLeak ? 'border-alert/40 bg-alert/15' : 'border-safe/25 bg-safe/[0.08]',
+            'flex size-10 items-center justify-center rounded-full',
+            isLeak ? 'bg-alert text-primary-foreground' : 'bg-safe/15 text-safe-ink',
           )}
         >
           {isLeak ? (
-            <TriangleAlert className="size-4 text-alert" aria-hidden="true" />
+            <TriangleAlert className="size-[18px]" aria-hidden="true" />
           ) : (
-            <ShieldCheck className="size-4 text-safe" aria-hidden="true" />
+            <ShieldCheck className="size-[18px]" aria-hidden="true" />
           )}
         </span>
         <span
           className={cn(
-            'text-[11px] font-semibold leading-tight tracking-[0.22em]',
-            isLeak ? 'text-alert' : 'text-safe',
+            'text-xs font-bold leading-tight tracking-[0.2em]',
+            isLeak ? 'text-alert-ink' : 'text-safe-ink',
           )}
         >
           {isLeak ? (
@@ -123,7 +140,7 @@ export function StatusRing({ status }: { status: ZoneStatus }) {
             'SAFE'
           )}
         </span>
-        <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
           {isLeak ? 'Action required' : 'Nominal flow'}
         </span>
       </div>
