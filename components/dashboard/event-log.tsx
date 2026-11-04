@@ -14,8 +14,9 @@ const levelStyles: Record<EventLevel, { label: string; dot: string; badge: strin
   },
   alert: {
     label: 'ALERT',
-    dot: 'bg-alert',
-    badge: 'bg-alert text-primary-foreground',
+    dot: 'rotate-45 rounded-[1px] bg-rose-600 shadow-[0_0_0_3px_rgb(225_29_72/0.12)] dark:bg-red-400 dark:shadow-[0_0_8px_rgb(248_113_113/0.7)]',
+    badge:
+      'bg-white/70 text-rose-800 ring-1 ring-inset ring-rose-200 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/30',
   },
 }
 
@@ -47,17 +48,30 @@ export function EventLog({ events }: { events: PipelineEvent[] }) {
       >
         {events.map((event) => {
           const level = levelStyles[event.level]
+          const isAlert = event.level === 'alert'
           return (
             <li
               key={event.id}
               className={cn(
-                'flex flex-col gap-1.5 border-b border-surface-border/70 px-5 py-3 transition-colors animate-in fade-in slide-in-from-top-2 duration-500 last:border-b-0 hover:bg-secondary sm:flex-row sm:items-center sm:gap-4 sm:px-6',
-                event.level === 'alert' && 'bg-alert/[0.05]',
+                'flex flex-col gap-1.5 border-b border-surface-border/70 px-5 py-3 transition-colors animate-in fade-in slide-in-from-top-2 duration-500 last:border-b-0 sm:flex-row sm:items-center sm:gap-4 sm:px-6',
+                isAlert
+                  ? 'border-y border-rose-100 bg-rose-50/70 hover:bg-rose-50 dark:border-red-900/50 dark:bg-red-950/30 dark:hover:bg-red-950/40'
+                  : 'hover:bg-secondary',
               )}
             >
               <div className="flex items-center gap-3">
-                <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', level.dot)} />
-                <time className="shrink-0 font-mono tabular-nums text-muted-foreground">
+                <span
+                  aria-hidden="true"
+                  className={cn('size-1.5 shrink-0', isAlert ? level.dot : cn('rounded-full', level.dot))}
+                />
+                <time
+                  className={cn(
+                    'shrink-0 font-mono tabular-nums',
+                    isAlert
+                      ? 'font-medium text-rose-700/80 dark:text-red-300 dark:[text-shadow:0_0_10px_rgb(248_113_113/0.45)]'
+                      : 'text-muted-foreground',
+                  )}
+                >
                   {event.timestamp}
                 </time>
                 <span
@@ -72,10 +86,18 @@ export function EventLog({ events }: { events: PipelineEvent[] }) {
               <p
                 className={cn(
                   'text-pretty leading-relaxed',
-                  event.level === 'alert' ? 'font-semibold text-alert-ink' : 'text-foreground',
+                  isAlert ? 'font-medium text-rose-950 dark:text-white' : 'text-foreground',
                 )}
               >
-                {event.zone && <span className="text-muted-foreground">{event.zone} · </span>}
+                {event.zone && (
+                  <span
+                    className={cn(
+                      isAlert ? 'text-rose-900/60 dark:text-red-200/60' : 'text-muted-foreground',
+                    )}
+                  >
+                    {event.zone} ·{' '}
+                  </span>
+                )}
                 {event.message}
               </p>
             </li>
