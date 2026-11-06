@@ -12,9 +12,10 @@ import { DashboardHeader } from './dashboard-header'
 import { ZoneCard } from './zone-card'
 import { EventLog } from './event-log'
 
-// Configured to hit your physical ESP32 high-speed local endpoint directly
-const LOCAL_ESP32_URL = 'http://192.168.1'
-const FAST_POLL_INTERVAL_MS = 200 // 5 unthrottled real-time updates every single second!
+// ⚠️ FIX 1: Replace this with the exact IP address of your ESP32 on your Wi-Fi network!
+// Example: 'http://192.168.1.100/data'
+const LOCAL_ESP32_URL = '/api/esp32' 
+const FAST_POLL_INTERVAL_MS = 200 
 const MAX_EVENTS = 50
 
 type ESP32DataPacket = {
@@ -66,8 +67,14 @@ export function PipelineDashboard() {
       inFlight = true
       try {
         const res = await fetch(LOCAL_ESP32_URL, {
-          cache: 'no-store',
+          method: 'GET',
+          mode: 'cors', // Browser demands CORS verification
+          headers: {
+            'Accept': 'application/json'
+          },
+          cache: 'no-store'
         })
+
         if (!res.ok) {
           throw new Error(`ESP32 Local Hub Unreachable (HTTP ${res.status})`)
         }
@@ -83,12 +90,11 @@ export function PipelineDashboard() {
         const transitions: PipelineEvent[] = []
 
         const nextZones = zonesRef.current.map((zone) => {
-          // Route your live hardware feed straight to Zone 1 dashboard values
+          // target your active ESP32 zone card (adjust index if needed)
           if (zone.index === 1) {
-            const vibrationValue = data.vibration
-            const batteryValue = data.battery
-            
-            // Dynamically flag a soft-rose alert panel if the filtered math crosses above 5.0
+            // Fallback safety if keys are named differently or nested
+            const vibrationValue = data.vibration ?? 0
+            const batteryValue = data.battery ?? 0
             const status: ZoneStatus = vibrationValue > 5.0 ? 'leak' : 'safe'
 
             const prev = previousStatus.current[zone.id]
@@ -118,15 +124,15 @@ export function PipelineDashboard() {
               vibrationHz: vibrationValue,
             }
           }
-          return zone; 
+          return zone
         })
 
         zonesRef.current = nextZones
         setZones(nextZones)
         pushEvents(transitions.reverse())
-      } catch (error) {
+      } catch (error: any) {
         if (cancelled) return
-        reportError('Unable to reach local ESP32 server — check if device is powered on and matching your home Wi-Fi')
+        reportError(`Connection Error: ${error.message || 'Check ESP32 IP & Wi-Fi'}`)
       } finally {
         inFlight = false
       }
