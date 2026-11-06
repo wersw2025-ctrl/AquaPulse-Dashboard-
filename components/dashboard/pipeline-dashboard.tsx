@@ -12,16 +12,14 @@ import { DashboardHeader } from './dashboard-header'
 import { ZoneCard } from './zone-card'
 import { EventLog } from './event-log'
 
-const AIO_USERNAME = "Dani_tonga";
-const AIO_KEY = "aio_rnJg328EyVoH23MhQfS2vnyuhJyO";
-
-const POLL_INTERVAL_MS = 4000
+// Configured to hit your physical ESP32 high-speed local endpoint directly
+const LOCAL_ESP32_URL = 'http://192.168.1'
+const FAST_POLL_INTERVAL_MS = 200 // 5 unthrottled real-time updates every single second!
 const MAX_EVENTS = 50
-const AIO_FEEDS_URL = `https://io.adafruit.com/api/v2/${AIO_USERNAME}/feeds`
 
-type AdafruitFeed = {
-  key: string
-  last_value: string | null
+type ESP32DataPacket = {
+  vibration: number
+  battery: number
 }
 
 function formatTimestamp(date: Date) {
@@ -37,12 +35,6 @@ function createEvent(event: Omit<PipelineEvent, 'id' | 'timestamp'>): PipelineEv
     id: `live-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     timestamp: formatTimestamp(new Date()),
   }
-}
-
-function parseNumber(value: string | null | undefined) {
-  if (value == null) return undefined
-  const parsed = Number.parseFloat(value)
-  return Number.isFinite(parsed) ? parsed : undefined
 }
 
 export function PipelineDashboard() {
@@ -66,58 +58,38 @@ export function PipelineDashboard() {
       pushEvents([createEvent({ level: 'alert', message })])
     }
 
-    if (AIO_KEY === 'PASTE_YOUR_ADAFRUIT_IO_KEY_HERE') {
-      reportError('Adafruit IO key not configured — paste your AIO Key to go live')
-      return
-    }
-
     let cancelled = false
     let inFlight = false
 
-    const poll = async () => {
+    const pollLocalESP32 = async () => {
       if (inFlight) return
       inFlight = true
       try {
-        // A single /feeds request returns every feed's last_value, which keeps
-        // polling well under the free-tier rate limit (30 requests/min).
-        const res = await fetch(AIO_FEEDS_URL, {
-          headers: { 'X-AIO-Key': AIO_KEY },
+        const res = await fetch(LOCAL_ESP32_URL, {
           cache: 'no-store',
         })
         if (!res.ok) {
-          throw new Error(
-            res.status === 401 || res.status === 403
-              ? 'Adafruit IO rejected credentials — check username and AIO Key'
-              : res.status === 429
-                ? 'Adafruit IO rate limit reached — retrying'
-                : `Adafruit IO request failed (HTTP ${res.status})`,
-          )
+          throw new Error(`ESP32 Local Hub Unreachable (HTTP ${res.status})`)
         }
 
-        const feeds = (await res.json()) as AdafruitFeed[]
+        const data = (await res.json()) as ESP32DataPacket
         if (cancelled) return
-
-        const feedValues = new Map(feeds.map((f) => [f.key, f.last_value]))
 
         if (lastErrorMessage.current) {
           lastErrorMessage.current = null
-          pushEvents([createEvent({ level: 'info', message: 'Adafruit IO connection restored' })])
+          pushEvents([createEvent({ level: 'info', message: 'High-speed local connection to ESP32 restored' })])
         }
 
         const transitions: PipelineEvent[] = []
 
         const nextZones = zonesRef.current.map((zone) => {
-            const prefix = `zone-${zone.index}`
-            const leakValue = feedValues.get(`${prefix}-leak`)
-            const battery = parseNumber(feedValues.get(`${prefix}-battery`))
-            const vibration = parseNumber(feedValues.get(`${prefix}-vibration`))
-
-            const status: ZoneStatus =
-              leakValue == null
-                ? zone.status
-                : leakValue.trim() === '1'
-                  ? 'leak'
-                  : 'safe'
+          // Route your live hardware feed straight to Zone 1 dashboard values
+          if (zone.index === 1) {
+            const vibrationValue = data.vibration
+            const batteryValue = data.battery
+            
+            // Dynamically flag a soft-rose alert panel if the filtered math crosses above 5.0
+            const status: ZoneStatus = vibrationValue > 5.0 ? 'leak' : 'safe'
 
             const prev = previousStatus.current[zone.id]
             if (prev !== status) {
@@ -128,12 +100,12 @@ export function PipelineDashboard() {
                     ? {
                         level: 'alert',
                         zone: `Zone ${zone.index}`,
-                        message: `LEAK DETECTED — ${zone.name} (${zone.sensorId})`,
+                        message: `🚨 LEAK DETECTED — ${zone.name} vibrating at ${vibrationValue} Hz`,
                       }
                     : {
                         level: 'info',
                         zone: `Zone ${zone.index}`,
-                        message: `Status cleared — ${zone.name} reporting SAFE`,
+                        message: `✅ Status cleared — ${zone.name} reporting SAFE baseline`,
                       },
                 ),
               )
@@ -142,28 +114,26 @@ export function PipelineDashboard() {
             return {
               ...zone,
               status,
-              batteryV: battery ?? zone.batteryV,
-              vibrationHz: vibration ?? zone.vibrationHz,
+              batteryV: batteryValue,
+              vibrationHz: vibrationValue,
             }
-          })
+          }
+          return zone; 
+        })
 
         zonesRef.current = nextZones
         setZones(nextZones)
         pushEvents(transitions.reverse())
       } catch (error) {
         if (cancelled) return
-        reportError(
-          error instanceof Error && error.message.startsWith('Adafruit')
-            ? error.message
-            : 'Unable to reach Adafruit IO — check network connection',
-        )
+        reportError('Unable to reach local ESP32 server — check if device is powered on and matching your home Wi-Fi')
       } finally {
         inFlight = false
       }
     }
 
-    poll()
-    const interval = setInterval(poll, POLL_INTERVAL_MS)
+    pollLocalESP32()
+    const interval = setInterval(pollLocalESP32, FAST_POLL_INTERVAL_MS)
 
     return () => {
       cancelled = true
