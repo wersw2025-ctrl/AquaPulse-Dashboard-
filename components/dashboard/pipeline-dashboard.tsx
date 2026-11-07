@@ -19,8 +19,7 @@ const MAX_EVENTS = 50
 type APIResponsePacket = {
   vibration?: number
   battery?: number
-  secondsAgo?: number
-  isStale?: boolean
+  rowId?: number
   error?: string
 }
 
@@ -47,6 +46,10 @@ export function PipelineDashboard() {
   )
   const lastErrorMessage = useRef<string | null>(null)
   const zonesRef = useRef<Zone[]>(initialZones)
+  
+  // Trackers for hardware id changes
+  const lastRowIdRef = useRef<number | null>(null)
+  const lastChangeTimeRef = useRef<number>(Date.now())
   const isOfflineRef = useRef<boolean>(false)
 
   useEffect(() => {
@@ -78,9 +81,22 @@ export function PipelineDashboard() {
         const data = (await res.json()) as APIResponsePacket
         if (cancelled) return
 
-        if (!res.ok || data.isStale || data.error) {
-          const delayMsg = data.secondsAgo ? ` (Last data row seen ${Math.round(data.secondsAgo)}s ago)` : ''
-          throw new Error(data.error || `ESP32 Telemetry is Stale${delayMsg}`)
+        if (!res.ok || data.error) {
+          throw new Error(data.error || 'Server error fetching telemetry')
+        }
+
+        const now = Date.now()
+
+        // If the database ID changes, reset our connection timers
+        if (data.rowId !== undefined && data.rowId !== lastRowIdRef.current) {
+          lastRowIdRef.current = data.rowId
+          lastChangeTimeRef.current = now
+        }
+
+        // ⏱️ If the latest row ID hasn't updated for more than 4 seconds, mark offline!
+        const secondsSinceLastUpdate = (now - lastChangeTimeRef.current) / 1000
+        if (secondsSinceLastUpdate > 4) {
+          throw new Error('ESP32 data stream is frozen (device offline)')
         }
 
         const transitions: PipelineEvent[] = []
