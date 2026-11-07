@@ -1,4 +1,4 @@
-export type ZoneStatus = 'safe' | 'leak'
+export type ZoneStatus = 'safe' | 'leak' | 'offline'
 
 export type Zone = {
   id: string

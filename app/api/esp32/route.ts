@@ -1,32 +1,30 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = 'https://jejXifxvgLlognjpynqc.supabase.co'
+const SUPABASE_URL = 'https://supabase.co'
 const SUPABASE_ANON_KEY = 'sb_publishable_U7pUJSL9uLKsCHgqcDi_3Q_ffDSTrOT'
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-// ⚡ Force Next.js to never cache this API response route
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
     const { data, error } = await supabase
       .from('telemetry')
-      .select('vibration, battery, created_at') // ✅ Now fetching the upload timestamp
+      .select('vibration, battery, created_at')
       .order('id', { ascending: false })
       .limit(1)
       .single()
 
     if (error || !data) throw new Error(error?.message || 'No data found')
 
-    // ⏱️ Check how long ago the ESP32 wrote this row to the database
     const lastUploadTime = new Date(data.created_at).getTime()
     const now = Date.now()
     const secondsSinceLastUpload = (now - lastUploadTime) / 1000
 
-    // 🛑 If no data has been written for more than 5 seconds, throw a hardware disconnect error
-    if (secondsSinceLastUpload > 5) {
+    // ✅ Extended to 12 seconds to give the hardware breathing room to boot up and connect
+    if (secondsSinceLastUpload > 12) {
       throw new Error('ESP32 telemetry data has gone stale (device offline)')
     }
 
@@ -42,7 +40,6 @@ export async function GET() {
       }
     )
   } catch (error: any) {
-    // 💥 Return a true HTTP 500 Failure status code so the frontend catches the timeout error instantly!
     return NextResponse.json(
       { error: error.message }, 
       { 
