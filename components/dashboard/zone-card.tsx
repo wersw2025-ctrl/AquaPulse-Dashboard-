@@ -61,6 +61,8 @@ export function ZoneCard({ zone }: { zone: Zone }) {
   
   const vibrationPct = clampPercent((zone.vibrationHz / VIBRATION_SCALE_HZ) * 100)
   const thresholdPct = (VIBRATION_THRESHOLD_HZ / VIBRATION_SCALE_HZ) * 100
+  
+  // 🔋 DYNAMIC BATTERY LIFE CALCULATION: Scales exactly between 3.0V (0%) and 4.2V (100%)
   const batteryPct = clampPercent(
     ((zone.batteryV - BATTERY_MIN_V) / (BATTERY_MAX_V - BATTERY_MIN_V)) * 100,
   )
@@ -148,7 +150,7 @@ export function ZoneCard({ zone }: { zone: Zone }) {
                     ? 'bg-muted/20'
                     : i < litSegments
                     ? batteryLow
-                      ? 'bg-alert'
+                      ? 'bg-alert animate-pulse'
                       : 'bg-safe'
                     : 'bg-muted/30',
                 )}
@@ -158,7 +160,6 @@ export function ZoneCard({ zone }: { zone: Zone }) {
         </MetricTile>
       </dl>
 
-      {/* 🟢 RESTORED: Footer bar with live indicators */}
       <footer className="mt-1 flex items-center justify-between border-t border-surface-border pt-3 text-[10px] font-medium tracking-wider text-muted-foreground/60 uppercase">
         <span>Feed · zone-{zone.index}-leak</span>
         <div className="flex items-center gap-1.5">
