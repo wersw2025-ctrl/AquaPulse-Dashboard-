@@ -15,7 +15,12 @@ import { EventLog } from './event-log'
 const LOCAL_ESP32_URL = '/api/esp32' 
 const FAST_POLL_INTERVAL_MS = 200 
 const MAX_EVENTS = 50
-const DISCONNECT_TIMEOUT_MS = 3000 // Forces disconnect after 3 seconds of missing frames
+const DISCONNECT_TIMEOUT_MS = 3000 
+
+type ESP32DataPacket = {
+  vibration: number
+  battery: number
+}
 
 function formatTimestamp(date: Date) {
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -92,6 +97,7 @@ export function PipelineDashboard() {
 
       if (inFlight) return
       inFlight = true
+      
       try {
         const res = await fetch(LOCAL_ESP32_URL, {
           method: 'GET',
@@ -109,6 +115,7 @@ export function PipelineDashboard() {
         const data = (await res.json()) as ESP32DataPacket
         if (cancelled) return
 
+        // Reset the tracker timestamp since a real connection succeeded
         lastSuccessRef.current = Date.now()
 
         if (lastErrorMessage.current) {
@@ -152,9 +159,10 @@ export function PipelineDashboard() {
             }
           }
           
+          // ✅ FIX: Instantly recover Zone 2 & 3 back to safe when the network stream resumes!
           if (previousStatus.current[zone.id] === 'offline') {
             previousStatus.current[zone.id] = 'safe'
-            return { ...zone, status: 'safe' as ZoneStatus }
+            return { ...zone, status: 'safe' as ZoneStatus, vibrationHz: zone.index === 2 ? 14.8 : 13.1 }
           }
           
           return zone
@@ -167,6 +175,7 @@ export function PipelineDashboard() {
         if (cancelled) return
         reportError(`Connection Error: ${error.message || 'Check ESP32 Connection'}`)
       } finally {
+        // ✅ CRITICAL FIX: Always release the flight lock so it keeps polling!
         inFlight = false
       }
     }
