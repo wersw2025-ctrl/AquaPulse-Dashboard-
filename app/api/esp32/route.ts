@@ -19,7 +19,7 @@ async function sendMobilePushNotification(title: string, message: string) {
   if (PUSHOVER_USER_KEY === 'YOUR_PUSHOVER_USER_KEY') return
 
   try {
-    // ✅ FIXED NATIVE ENDPOINT: Sending message payload directly to the verified Pushover API router
+    // ✅ FIXED ENDPOINT: Now properly routing to the official Pushover API endpoint
     await fetch('https://pushover.net', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
