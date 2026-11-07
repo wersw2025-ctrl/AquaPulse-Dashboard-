@@ -47,7 +47,6 @@ export function PipelineDashboard() {
   const lastErrorMessage = useRef<string | null>(null)
   const zonesRef = useRef<Zone[]>(initialZones)
   
-  // Trackers for hardware id changes
   const lastRowIdRef = useRef<number | null>(null)
   const lastChangeTimeRef = useRef<number>(Date.now())
   const isOfflineRef = useRef<boolean>(false)
@@ -87,13 +86,11 @@ export function PipelineDashboard() {
 
         const now = Date.now()
 
-        // If the database ID changes, reset our connection timers
         if (data.rowId !== undefined && data.rowId !== lastRowIdRef.current) {
           lastRowIdRef.current = data.rowId
           lastChangeTimeRef.current = now
         }
 
-        // ⏱️ If the latest row ID hasn't updated for more than 4 seconds, mark offline!
         const secondsSinceLastUpdate = (now - lastChangeTimeRef.current) / 1000
         if (secondsSinceLastUpdate > 4) {
           throw new Error('ESP32 data stream is frozen (device offline)')
@@ -109,6 +106,7 @@ export function PipelineDashboard() {
         }
 
         const nextZones = zonesRef.current.map((zone) => {
+          // 📡 ZONE 1: Responds to your physical device dynamically
           if (zone.index === 1) {
             const vibrationValue = data.vibration ?? 0
             const batteryValue = data.battery ?? 0
@@ -131,17 +129,14 @@ export function PipelineDashboard() {
             return { ...zone, status, batteryV: batteryValue, vibrationHz: vibrationValue }
           }
           
-          if (previousStatus.current[zone.id] === 'offline' || wasOffline) {
-            previousStatus.current[zone.id] = 'safe'
-            return { 
-              ...zone, 
-              status: 'safe' as ZoneStatus, 
-              vibrationHz: zone.index === 2 ? 14.8 : 13.1,
-              batteryV: zone.index === 2 ? 3.78 : 3.41
-            }
+          // 🛑 ZONE 2 & 3: Lock them permanently offline since no hardware exists for them
+          previousStatus.current[zone.id] = 'offline'
+          return { 
+            ...zone, 
+            status: 'offline' as ZoneStatus, 
+            vibrationHz: 0,
+            batteryV: 0
           }
-          
-          return zone
         })
 
         zonesRef.current = nextZones
@@ -153,9 +148,10 @@ export function PipelineDashboard() {
         isOfflineRef.current = true
         reportError(`Offline: ${error.message || 'Check ESP32'}`)
         
+        // When Zone 1 crashes, keep it offline along with Zone 2 and Zone 3
         const offlineZones = zonesRef.current.map((zone) => {
           previousStatus.current[zone.id] = 'offline'
-          return { ...zone, status: 'offline' as ZoneStatus, vibrationHz: 0 }
+          return { ...zone, status: 'offline' as ZoneStatus, vibrationHz: 0, batteryV: 0 }
         })
         
         zonesRef.current = offlineZones
