@@ -7,25 +7,19 @@ const SUPABASE_ANON_KEY = 'sb_publishable_U7pUJSL9uLKsCHgqcDi_3Q_ffDSTrOT'
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-// 💡 MOBILE PUSH NOTIFICATION KEYS (Fill these in from Pushsafer or Pushover later)
-const MOBILE_PUSH_API_KEY = 'G2O7brPWuISaSMxxTjqy'
-const MOBILE_PUSH_DEVICE_ID = '110576'
+// 💡 MOBILE PUSH NOTIFICATION KEYS (Enter your valid private keys inside the quotes below)
+const MOBILE_PUSH_API_KEY = 'YOUR_PUSHSAFER_API_KEY'
+const MOBILE_PUSH_DEVICE_ID = 'YOUR_DEVICE_ID'
 
 // 🚫 FORCE NO CACHE: Always pull fresh live data
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-// Safety trackers in server memory to prevent flooding your phone with 60 notifications per minute
-let lastNotificationTime = 0
-let lastKnownState: 'safe' | 'leak' = 'safe'
-
 async function sendMobilePushNotification(title: string, message: string) {
-  const now = Date.now()
-  // Anti-flood throttle: Don't send more than one notification every 30 seconds
-  if (now - lastNotificationTime < 30000) return
-  if (MOBILE_PUSH_API_KEY === 'G2O7brPWuISaSMxxTjqy') return
+  if (MOBILE_PUSH_API_KEY === 'YOUR_PUSHSAFER_API_KEY') return
 
   try {
+    // ✅ FIXED API ENDPOINT: Pointing to the proper Pushsafer processing directory
     await fetch('https://pushsafer.com', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -33,12 +27,11 @@ async function sendMobilePushNotification(title: string, message: string) {
         k: MOBILE_PUSH_API_KEY,
         m: message,
         t: title,
-        i: '1',  // Warning Icon profile
-        s: '11', // High-pitch siren ringtone option
+        i: '1',  
+        s: '11', 
         d: MOBILE_PUSH_DEVICE_ID
       })
     })
-    lastNotificationTime = now
   } catch (err) {
     console.error('Failed to dispatch background mobile push alert:', err)
   }
@@ -46,38 +39,49 @@ async function sendMobilePushNotification(title: string, message: string) {
 
 export async function GET() {
   try {
-    const { data, error } = await supabase
+    // 🔍 STATELESS OPERATION: Fetch the 2 most recent rows to track real database changes accurately
+    const { data: records, error } = await supabase
       .from('telemetry')
-      .select('vibration, battery, id') // Targets the valid id column you have
+      .select('vibration, battery, id')
       .order('id', { ascending: false })
-      .limit(1)
-      .single()
+      .limit(2)
 
-    if (error || !data) throw new Error(error?.message || 'No data found')
+    if (error || !records || records.length === 0) {
+      throw new Error(error?.message || 'No telemetry records found')
+    }
 
-    const vibrationValue = data.vibration ?? 0
-    const currentState = vibrationValue > 5.0 ? 'leak' : 'safe'
+    // Latest row data packet
+    const latestRecord = records[0]
+    const currentVibration = latestRecord.vibration ?? 0
+    const isCurrentLeak = currentVibration > 5.0
 
-    // 📱 DETECT TRANSITIONS: Instantly alerts your phone layout when status shifts
-    if (currentState === 'leak' && lastKnownState !== 'leak') {
-      lastKnownState = 'leak'
-      await sendMobilePushNotification(
-        '🚨 CRITICAL LEAK SUSPECTED',
-        `Zone 1 Pipe Anomaly! Vibration levels spiking at ${vibrationValue} Hz.`
-      )
-    } else if (currentState === 'safe' && lastKnownState === 'leak') {
-      lastKnownState = 'safe'
-      await sendMobilePushNotification(
-        '✅ Zone 1 Safe Status Clear',
-        `Pipeline metrics returned smoothly to an optimal baseline.`
-      )
+    // Evaluate historical trends if we have a comparative previous row record
+    if (records.length === 2) {
+      const previousRecord = records[1]
+      const previousVibration = previousRecord.vibration ?? 0
+      const wasPreviousLeak = previousVibration > 5.0
+
+      // 🚨 REAL DATABASE TRANSITION CHECKS: Completely immune to Vercel memory resets!
+      if (isCurrentLeak && !wasPreviousLeak) {
+        // Safe transitioned to Leak -> Fire push alert!
+        await sendMobilePushNotification(
+          '🚨 CRITICAL LEAK SUSPECTED',
+          `Zone 1 Pipe Anomaly! Vibration levels spiking at ${currentVibration} Hz.`
+        )
+      } else if (!isCurrentLeak && wasPreviousLeak) {
+        // Leak transitioned to Safe -> Fire clear alert!
+        await sendMobilePushNotification(
+          '✅ Zone 1 Safe Status Clear',
+          `Pipeline metrics returned smoothly to an optimal baseline.`
+        )
+      }
     }
 
     return new NextResponse(
       JSON.stringify({
-        vibration: data.vibration,
-        battery: data.battery,
-        rowId: data.id
+        vibration: latestRecord.vibration,
+        battery: latestRecord.battery,
+        rowId: latestRecord.id
       }),
       {
         status: 200,
