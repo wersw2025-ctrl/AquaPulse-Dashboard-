@@ -23,7 +23,7 @@ async function sendMobilePushNotification(title: string, message: string) {
   const now = Date.now()
   // Anti-flood throttle: Don't send more than one notification every 30 seconds
   if (now - lastNotificationTime < 30000) return
-  if (MOBILE_PUSH_API_KEY === 'YOUR_PUSHSAFER_OR_PUSHOVER_API_KEY') return
+  if (MOBILE_PUSH_API_KEY === 'G2O7brPWuISaSMxxTjqy') return
 
   try {
     await fetch('https://pushsafer.com', {
