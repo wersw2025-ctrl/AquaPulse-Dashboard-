@@ -8,10 +8,10 @@ const SUPABASE_ANON_KEY = 'sb_publishable_U7pUJSL9uLKsCHgqcDi_3Q_ffDSTrOT'
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 // 💡 MOBILE PUSH NOTIFICATION KEYS (Enter your valid private keys inside the quotes below)
-const MOBILE_PUSH_API_KEY = 'YOUR_PUSHSAFER_API_KEY'
-const MOBILE_PUSH_DEVICE_ID = 'YOUR_DEVICE_ID'
+const MOBILE_PUSH_API_KEY = 'G2O7brPWulSaSMxxTjqy'
+const MOBILE_PUSH_DEVICE_ID = '110576'
 
-// 🚫 FORCE NO CACHE: Always pull fresh live data
+// 🚫 FORCE NO CACHE: Always pull fresh live data   
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
