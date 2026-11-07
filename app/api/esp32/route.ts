@@ -9,7 +9,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 // 💡 MOBILE PUSH NOTIFICATION KEYS (Fill these in from Pushsafer or Pushover later)
 const MOBILE_PUSH_API_KEY = 'G2O7brPWuISaSMxxTjqy'
-const MOBILE_PUSH_DEVICE_ID = '110575'
+const MOBILE_PUSH_DEVICE_ID = '110576'
 
 // 🚫 FORCE NO CACHE: Always pull fresh live data
 export const dynamic = 'force-dynamic'
