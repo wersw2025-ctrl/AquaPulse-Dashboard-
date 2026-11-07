@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = 'https://supabase.co'
+// ✅ FIXED: Restored your unique database project instance ID router domain!
+const SUPABASE_URL = 'https://jejXifxvgLlognjpynqc.supabase.co'
 const SUPABASE_ANON_KEY = 'sb_publishable_U7pUJSL9uLKsCHgqcDi_3Q_ffDSTrOT'
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export async function GET() {
   try {
@@ -21,30 +23,35 @@ export async function GET() {
 
     const lastUploadTime = new Date(data.created_at).getTime()
     const now = Date.now()
-    const secondsSinceLastUpload = (now - lastUploadTime) / 1000
+    const secondsSinceLastUpload = Math.max(0, (now - lastUploadTime) / 1000)
 
-    // ✅ Extended to 12 seconds to give the hardware breathing room to boot up and connect
-    if (secondsSinceLastUpload > 12) {
-      throw new Error('ESP32 telemetry data has gone stale (device offline)')
-    }
+    const isStale = secondsSinceLastUpload > 20
 
-    return NextResponse.json(
-      {
+    return new NextResponse(
+      JSON.stringify({
         vibration: data.vibration,
-        battery: data.battery
-      },
+        battery: data.battery,
+        secondsAgo: secondsSinceLastUpload,
+        isStale: isStale
+      }),
       {
+        status: 200,
         headers: {
-          'Cache-Control': 'no-store, max-age=0, must-revalidate',
-        }
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          'Surrogate-Control': 'no-store',
+        },
       }
     )
   } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message }, 
-      { 
+    return new NextResponse(
+      JSON.stringify({ error: error.message, isStale: true, secondsAgo: 999 }),
+      {
         status: 500,
-        headers: { 'Cache-Control': 'no-store, max-age=0, must-revalidate' }
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        },
       }
     )
   }

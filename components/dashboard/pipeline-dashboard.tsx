@@ -13,12 +13,15 @@ import { ZoneCard } from './zone-card'
 import { EventLog } from './event-log'
 
 const LOCAL_ESP32_URL = '/api/esp32' 
-const FAST_POLL_INTERVAL_MS = 500 // Polling slightly slower avoids hammering the API during disconnect states
+const FAST_POLL_INTERVAL_MS = 1000 
 const MAX_EVENTS = 50
 
-type ESP32DataPacket = {
-  vibration: number
-  battery: number
+type APIResponsePacket = {
+  vibration?: number
+  battery?: number
+  secondsAgo?: number
+  isStale?: boolean
+  error?: string
 }
 
 function formatTimestamp(date: Date) {
@@ -66,25 +69,23 @@ export function PipelineDashboard() {
       inFlight = true
       
       try {
-        const res = await fetch(LOCAL_ESP32_URL, {
+        const res = await fetch(`${LOCAL_ESP32_URL}?t=${Date.now()}`, {
           method: 'GET',
-          mode: 'cors',
           headers: { 'Accept': 'application/json' },
           cache: 'no-store'
         })
 
-        // 🛑 HANDLE OFFLINE / CONNECTION LOST STATUS
-        if (!res.ok) {
-          throw new Error(`ESP32 Local Hub Unreachable (HTTP ${res.status})`)
-        }
-
-        const data = (await res.json()) as ESP32DataPacket
+        const data = (await res.json()) as APIResponsePacket
         if (cancelled) return
+
+        if (!res.ok || data.isStale || data.error) {
+          const delayMsg = data.secondsAgo ? ` (Last data row seen ${Math.round(data.secondsAgo)}s ago)` : ''
+          throw new Error(data.error || `ESP32 Telemetry is Stale${delayMsg}`)
+        }
 
         const transitions: PipelineEvent[] = []
         const wasOffline = isOfflineRef.current
         
-        // Clear errors immediately on clean data arrival
         isOfflineRef.current = false
         if (lastErrorMessage.current || wasOffline) {
           lastErrorMessage.current = null
@@ -114,7 +115,6 @@ export function PipelineDashboard() {
             return { ...zone, status, batteryV: batteryValue, vibrationHz: vibrationValue }
           }
           
-          // Clear static fallback zones from offline status
           if (previousStatus.current[zone.id] === 'offline' || wasOffline) {
             previousStatus.current[zone.id] = 'safe'
             return { 
@@ -135,9 +135,8 @@ export function PipelineDashboard() {
         if (cancelled) return
         
         isOfflineRef.current = true
-        reportError(`Connection Error: ${error.message || 'Check ESP32 Connection'}`)
+        reportError(`Offline: ${error.message || 'Check ESP32'}`)
         
-        // Force the layout cards to render the gray theme state
         const offlineZones = zonesRef.current.map((zone) => {
           previousStatus.current[zone.id] = 'offline'
           return { ...zone, status: 'offline' as ZoneStatus, vibrationHz: 0 }
