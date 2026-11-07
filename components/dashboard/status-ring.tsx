@@ -1,4 +1,4 @@
-import { ShieldCheck, TriangleAlert } from 'lucide-react'
+import { ShieldCheck, TriangleAlert, RadioOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ZoneStatus } from '@/lib/pipeline-data'
 
@@ -8,6 +8,7 @@ const TICKS = Array.from({ length: 60 }, (_, i) => i)
 
 export function StatusRing({ status }: { status: ZoneStatus }) {
   const isLeak = status === 'leak'
+  const isOffline = status === 'offline'
 
   return (
     <div
@@ -20,7 +21,7 @@ export function StatusRing({ status }: { status: ZoneStatus }) {
         aria-hidden="true"
         className={cn(
           'absolute inset-5 rounded-full transition-colors duration-700',
-          isLeak ? 'bg-alert/[0.08]' : 'bg-safe/[0.06]',
+          isOffline ? 'bg-muted/10' : isLeak ? 'bg-alert/[0.08]' : 'bg-safe/[0.06]',
         )}
       />
 
@@ -66,7 +67,9 @@ export function StatusRing({ status }: { status: ZoneStatus }) {
         <g
           className={cn(
             'origin-center transition-colors duration-700',
-            isLeak
+            isOffline
+              ? 'text-muted-foreground/30'
+              : isLeak
               ? 'animate-alert-pulse text-alert'
               : 'text-safe dark:drop-shadow-[0_0_6px_color-mix(in_oklch,var(--safe)_60%,transparent)]',
           )}
@@ -87,7 +90,7 @@ export function StatusRing({ status }: { status: ZoneStatus }) {
           />
         </g>
 
-        {!isLeak && (
+        {!isLeak && !isOffline && (
           <g className="origin-center animate-ring-scan text-safe-ink">
             <circle
               cx="70"
@@ -117,10 +120,16 @@ export function StatusRing({ status }: { status: ZoneStatus }) {
         <span
           className={cn(
             'flex size-10 items-center justify-center rounded-full',
-            isLeak ? 'bg-alert text-primary-foreground' : 'bg-safe/15 text-safe-ink',
+            isOffline
+              ? 'bg-muted text-muted-foreground'
+              : isLeak
+              ? 'bg-alert text-primary-foreground'
+              : 'bg-safe/15 text-safe-ink',
           )}
         >
-          {isLeak ? (
+          {isOffline ? (
+            <RadioOff className="size-[18px]" aria-hidden="true" />
+          ) : isLeak ? (
             <TriangleAlert className="size-[18px]" aria-hidden="true" />
           ) : (
             <ShieldCheck className="size-[18px]" aria-hidden="true" />
@@ -129,10 +138,12 @@ export function StatusRing({ status }: { status: ZoneStatus }) {
         <span
           className={cn(
             'text-xs font-bold leading-tight tracking-[0.2em]',
-            isLeak ? 'text-alert-ink' : 'text-safe-ink',
+            isOffline ? 'text-muted-foreground' : isLeak ? 'text-alert-ink' : 'text-safe-ink',
           )}
         >
-          {isLeak ? (
+          {isOffline ? (
+            'OFFLINE'
+          ) : isLeak ? (
             <>
               LEAK
               <br />
@@ -143,7 +154,7 @@ export function StatusRing({ status }: { status: ZoneStatus }) {
           )}
         </span>
         <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-          {isLeak ? 'Action required' : 'Nominal flow'}
+          {isOffline ? 'No telemetry' : isLeak ? 'Action required' : 'Nominal flow'}
         </span>
       </div>
     </div>

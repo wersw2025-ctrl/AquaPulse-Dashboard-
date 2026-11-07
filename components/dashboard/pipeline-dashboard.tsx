@@ -12,16 +12,10 @@ import { DashboardHeader } from './dashboard-header'
 import { ZoneCard } from './zone-card'
 import { EventLog } from './event-log'
 
-// ⚠️ FIX 1: Replace this with the exact IP address of your ESP32 on your Wi-Fi network!
-// Example: 'http://192.168.1.100/data'
 const LOCAL_ESP32_URL = '/api/esp32' 
 const FAST_POLL_INTERVAL_MS = 200 
 const MAX_EVENTS = 50
-
-type ESP32DataPacket = {
-  vibration: number
-  battery: number
-}
+const DISCONNECT_TIMEOUT_MS = 3000 // Forces disconnect after 3 seconds of missing frames
 
 function formatTimestamp(date: Date) {
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -46,6 +40,7 @@ export function PipelineDashboard() {
   )
   const lastErrorMessage = useRef<string | null>(null)
   const zonesRef = useRef<Zone[]>(initialZones)
+  const lastSuccessRef = useRef<number>(Date.now())
 
   useEffect(() => {
     const pushEvents = (newEvents: PipelineEvent[]) => {
@@ -63,12 +58,44 @@ export function PipelineDashboard() {
     let inFlight = false
 
     const pollLocalESP32 = async () => {
+      // ⏱️ Timeout Check
+      const timeSinceLastSuccess = Date.now() - lastSuccessRef.current
+      if (timeSinceLastSuccess > DISCONNECT_TIMEOUT_MS) {
+        const offlineTransitions: PipelineEvent[] = []
+        
+        const offlineZones = zonesRef.current.map((zone) => {
+          const prev = previousStatus.current[zone.id]
+          if (prev !== 'offline') {
+            previousStatus.current[zone.id] = 'offline'
+            offlineTransitions.push(
+              createEvent({
+                level: 'alert',
+                zone: `Zone ${zone.index}`,
+                message: `⚠️ Connection Lost — ${zone.name} is OFFLINE`,
+              })
+            )
+          }
+
+          return {
+            ...zone,
+            status: 'offline' as ZoneStatus,
+            vibrationHz: 0,
+          }
+        })
+
+        if (!cancelled && offlineTransitions.length > 0) {
+          zonesRef.current = offlineZones
+          setZones(offlineZones)
+          pushEvents(offlineTransitions.reverse())
+        }
+      }
+
       if (inFlight) return
       inFlight = true
       try {
         const res = await fetch(LOCAL_ESP32_URL, {
           method: 'GET',
-          mode: 'cors', // Browser demands CORS verification
+          mode: 'cors',
           headers: {
             'Accept': 'application/json'
           },
@@ -82,17 +109,17 @@ export function PipelineDashboard() {
         const data = (await res.json()) as ESP32DataPacket
         if (cancelled) return
 
+        lastSuccessRef.current = Date.now()
+
         if (lastErrorMessage.current) {
           lastErrorMessage.current = null
-          pushEvents([createEvent({ level: 'info', message: 'High-speed local connection to ESP32 restored' })])
+          pushEvents([createEvent({ level: 'info', message: 'Connection to ESP32 restored' })])
         }
 
         const transitions: PipelineEvent[] = []
 
         const nextZones = zonesRef.current.map((zone) => {
-          // target your active ESP32 zone card (adjust index if needed)
           if (zone.index === 1) {
-            // Fallback safety if keys are named differently or nested
             const vibrationValue = data.vibration ?? 0
             const batteryValue = data.battery ?? 0
             const status: ZoneStatus = vibrationValue > 5.0 ? 'leak' : 'safe'
@@ -124,6 +151,12 @@ export function PipelineDashboard() {
               vibrationHz: vibrationValue,
             }
           }
+          
+          if (previousStatus.current[zone.id] === 'offline') {
+            previousStatus.current[zone.id] = 'safe'
+            return { ...zone, status: 'safe' as ZoneStatus }
+          }
+          
           return zone
         })
 
@@ -132,7 +165,7 @@ export function PipelineDashboard() {
         pushEvents(transitions.reverse())
       } catch (error: any) {
         if (cancelled) return
-        reportError(`Connection Error: ${error.message || 'Check ESP32 IP & Wi-Fi'}`)
+        reportError(`Connection Error: ${error.message || 'Check ESP32 Connection'}`)
       } finally {
         inFlight = false
       }

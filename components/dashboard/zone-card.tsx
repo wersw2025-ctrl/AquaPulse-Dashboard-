@@ -57,6 +57,8 @@ function MetricTile({
 
 export function ZoneCard({ zone }: { zone: Zone }) {
   const isLeak = zone.status === 'leak'
+  const isOffline = zone.status === 'offline'
+  
   const vibrationPct = clampPercent((zone.vibrationHz / VIBRATION_SCALE_HZ) * 100)
   const thresholdPct = (VIBRATION_THRESHOLD_HZ / VIBRATION_SCALE_HZ) * 100
   const batteryPct = clampPercent(
@@ -70,6 +72,7 @@ export function ZoneCard({ zone }: { zone: Zone }) {
       aria-labelledby={`${zone.id}-title`}
       className={cn(
         'surface group relative flex flex-col gap-5 overflow-hidden rounded-2xl p-5 transition-all duration-500 ease-out hover:-translate-y-0.5 hover:shadow-lg sm:p-6',
+        isOffline && 'opacity-75 grayscale-[20%]',
         isLeak && 'border-alert/50 shadow-[0_12px_32px_-12px_color-mix(in_oklch,var(--alert)_40%,transparent)]',
       )}
     >
@@ -77,7 +80,7 @@ export function ZoneCard({ zone }: { zone: Zone }) {
         aria-hidden="true"
         className={cn(
           'pointer-events-none absolute inset-x-0 top-0 h-1 transition-colors duration-700',
-          isLeak ? 'bg-alert' : 'bg-gradient-to-r from-primary to-safe',
+          isOffline ? 'bg-muted' : isLeak ? 'bg-alert' : 'bg-gradient-to-r from-primary to-safe',
         )}
       />
 
@@ -90,7 +93,10 @@ export function ZoneCard({ zone }: { zone: Zone }) {
             {zone.name}
           </h2>
         </div>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-surface-border bg-secondary px-2.5 py-1 font-mono text-[11px] text-muted-foreground">
+        <span className={cn(
+          "inline-flex items-center gap-1.5 rounded-full border border-surface-border bg-secondary px-2.5 py-1 font-mono text-[11px]",
+          isOffline ? "text-muted-foreground line-through" : "text-muted-foreground"
+        )}>
           <Radio className="size-3" aria-hidden="true" />
           {zone.sensorId}
         </span>
@@ -100,67 +106,57 @@ export function ZoneCard({ zone }: { zone: Zone }) {
         <StatusRing status={zone.status} />
       </div>
 
-      <dl className="grid grid-cols-2 gap-2.5">
+      <dl className="grid grid-cols-2 gap-3 sm:gap-4">
         <MetricTile
-          icon={<Activity className="size-3.5" aria-hidden="true" />}
+          icon={<Activity className="size-3.5" />}
           label="Vibration"
-          value={zone.vibrationHz.toFixed(1)}
+          value={isOffline ? '—' : zone.vibrationHz.toFixed(1)}
           unit="Hz"
         >
-          <span
-            className="relative h-1.5 w-full overflow-hidden rounded-full bg-foreground/[0.08]"
-            role="presentation"
-          >
-            <span
-              className={cn(
-                'absolute inset-y-0 left-0 rounded-full transition-[width,background-color] duration-700 ease-out',
-                isLeak ? 'bg-alert' : 'bg-primary',
-              )}
-              style={{ width: `${vibrationPct}%` }}
-            />
-            <span
-              aria-hidden="true"
-              className="absolute inset-y-0 w-0.5 bg-foreground/40"
-              style={{ left: `${thresholdPct}%` }}
-            />
-          </span>
+          <div className="h-1.5 w-full rounded-full bg-muted/30 overflow-hidden relative">
+            {!isOffline && (
+              <>
+                <div 
+                  className={cn(
+                    "absolute top-0 bottom-0 left-0 transition-all duration-500",
+                    isLeak ? "bg-alert" : "bg-primary"
+                  )}
+                  style={{ width: `${vibrationPct}%` }}
+                />
+                <div 
+                  className="absolute top-0 bottom-0 w-0.5 bg-alert/80" 
+                  style={{ left: `${thresholdPct}%` }}
+                />
+              </>
+            )}
+          </div>
         </MetricTile>
 
         <MetricTile
-          icon={<BatteryMedium className="size-3.5" aria-hidden="true" />}
+          icon={<BatteryMedium className="size-3.5" />}
           label="Battery"
-          value={zone.batteryV.toFixed(2)}
+          value={isOffline ? '—' : zone.batteryV.toFixed(2)}
           unit="V"
         >
-          <span className="flex h-1.5 w-full gap-0.5" role="presentation">
-            {Array.from({ length: BATTERY_SEGMENTS }, (_, i) => (
-              <span
+          <div className="flex gap-0.5">
+            {Array.from({ length: BATTERY_SEGMENTS }).map((_, i) => (
+              <div
                 key={i}
                 className={cn(
-                  'h-full flex-1 rounded-full transition-colors duration-500',
-                  i < litSegments
+                  'h-1.5 flex-1 rounded-sm transition-colors duration-300',
+                  isOffline
+                    ? 'bg-muted/20'
+                    : i < litSegments
                     ? batteryLow
                       ? 'bg-alert'
                       : 'bg-safe'
-                    : 'bg-foreground/[0.08]',
+                    : 'bg-muted/30',
                 )}
-                style={{ transitionDelay: `${i * 30}ms` }}
               />
             ))}
-          </span>
+          </div>
         </MetricTile>
       </dl>
-
-      <footer className="flex items-center justify-between border-t border-surface-border pt-4 text-[11px] text-muted-foreground">
-        <span className="font-mono">feed · zone-{zone.index}-leak</span>
-        <span className="flex items-center gap-1.5 font-medium">
-          <span
-            aria-hidden="true"
-            className={cn('size-1.5 rounded-full', isLeak ? 'animate-pulse bg-alert' : 'bg-safe')}
-          />
-          Live
-        </span>
-      </footer>
     </article>
   )
 }
