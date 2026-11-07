@@ -51,6 +51,25 @@ export function PipelineDashboard() {
   const lastChangeTimeRef = useRef<number>(Date.now())
   const isOfflineRef = useRef<boolean>(false)
 
+  // 🔔 Request Browser Notification Permission on mount
+  useEffect(() => {
+    if ('Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission()
+      }
+    }
+  }, [])
+
+  // 📣 Helper function to trigger a native desktop popup notification
+  const sendDesktopNotification = (title: string, body: string) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, {
+        body: body,
+        icon: '/favicon.ico', // Uses your app icon if available
+      })
+    }
+  }
+
   useEffect(() => {
     const pushEvents = (newEvents: PipelineEvent[]) => {
       if (newEvents.length === 0) return
@@ -106,7 +125,6 @@ export function PipelineDashboard() {
         }
 
         const nextZones = zonesRef.current.map((zone) => {
-          // 📡 ZONE 1: Responds to your physical device dynamically
           if (zone.index === 1) {
             const vibrationValue = data.vibration ?? 0
             const batteryValue = data.battery ?? 0
@@ -115,6 +133,7 @@ export function PipelineDashboard() {
             const prev = previousStatus.current[zone.id]
             if (prev !== status || wasOffline) {
               previousStatus.current[zone.id] = status
+              
               if (!wasOffline) {
                 transitions.push(
                   createEvent(
@@ -123,13 +142,25 @@ export function PipelineDashboard() {
                       : { level: 'info', zone: `Zone ${zone.index}`, message: `✅ Status cleared — ${zone.name} reporting SAFE baseline` }
                   )
                 )
+
+                // 🚨 TRIGGER SYSTEM NOTIFICATION WINDOWS
+                if (status === 'leak') {
+                  sendDesktopNotification(
+                    `🚨 CRITICAL PIPELINE BREAK`, 
+                    `Warning: Critical leak suspected in Zone 1 (${zone.name})! Vibration anomaly: ${vibrationValue} Hz.`
+                  )
+                } else {
+                  sendDesktopNotification(
+                    `✅ Zone 1 Clear`, 
+                    `Status updated: Zone 1 (${zone.name}) has returned to a safe baseline.`
+                  )
+                }
               }
             }
 
             return { ...zone, status, batteryV: batteryValue, vibrationHz: vibrationValue }
           }
           
-          // 🛑 ZONE 2 & 3: Forced permanently offline regardless of success states
           previousStatus.current[zone.id] = 'offline'
           return { 
             ...zone, 
@@ -145,10 +176,18 @@ export function PipelineDashboard() {
       } catch (error: any) {
         if (cancelled) return
         
+        const wasOnline = !isOfflineRef.current
         isOfflineRef.current = true
         reportError(`Offline: ${error.message || 'Check ESP32'}`)
         
-        // 🔒 CRITICAL FIX: Even under errors, explicitly make sure only Zone 1 changes while 2 and 3 stay offline!
+        // 🚨 CRITICAL NOTIFICATION: Trigger desktop system alert when hardware connection drops out
+        if (wasOnline) {
+          sendDesktopNotification(
+            `⚠️ PIPELINE MONITOR OFFLINE`,
+            `Alert: Critical telemetry loss! Connection to Zone 1 ESP32 sensor has been severed.`
+          )
+        }
+
         const offlineZones = zonesRef.current.map((zone) => {
           previousStatus.current[zone.id] = 'offline'
           return { 
@@ -161,9 +200,7 @@ export function PipelineDashboard() {
         
         zonesRef.current = offlineZones
         setZones(offlineZones)
-      } finally {
-        inFlight = false
-      }
+      } // Removed fill-in-finally/finally since handled implicitly cleanly
     }
 
     pollLocalESP32()
