@@ -157,6 +157,18 @@ export function ZoneCard({ zone }: { zone: Zone }) {
           </div>
         </MetricTile>
       </dl>
+
+      {/* 🟢 RESTORED: Footer bar with live indicators */}
+      <footer className="mt-1 flex items-center justify-between border-t border-surface-border pt-3 text-[10px] font-medium tracking-wider text-muted-foreground/60 uppercase">
+        <span>Feed · zone-{zone.index}-leak</span>
+        <div className="flex items-center gap-1.5">
+          <span className={cn(
+            "size-1.5 rounded-full",
+            isOffline ? "bg-muted-foreground/40" : isLeak ? "animate-pulse bg-alert" : "animate-pulse bg-safe"
+          )} />
+          <span>{isOffline ? 'Offline' : 'Live'}</span>
+        </div>
+      </footer>
     </article>
   )
 }
