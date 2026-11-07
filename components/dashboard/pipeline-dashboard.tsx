@@ -12,8 +12,8 @@ import { DashboardHeader } from './dashboard-header'
 import { ZoneCard } from './zone-card'
 import { EventLog } from './event-log'
 
-const LOCAL_ESP32_URL = '/api/esp32' 
-const FAST_POLL_INTERVAL_MS = 1000 
+const LOCAL_ESP32_URL = '/api/esp32'
+const FAST_POLL_INTERVAL_MS = 1000
 const MAX_EVENTS = 50
 
 type APIResponsePacket = {
@@ -46,12 +46,12 @@ export function PipelineDashboard() {
   )
   const lastErrorMessage = useRef<string | null>(null)
   const zonesRef = useRef<Zone[]>(initialZones)
-  
+ 
   const lastRowIdRef = useRef<number | null>(null)
   const lastChangeTimeRef = useRef<number>(Date.now())
   const isOfflineRef = useRef<boolean>(false)
 
-  // 🔔 Request Browser Notification Permission on mount
+  // 🔔 Request Browser Notification Permission safely on component load
   useEffect(() => {
     if ('Notification' in window) {
       if (Notification.permission === 'default') {
@@ -60,12 +60,11 @@ export function PipelineDashboard() {
     }
   }, [])
 
-  // 📣 Helper function to trigger a native desktop popup notification
+  // 📣 Helper function to safely send desktop banner popups
   const sendDesktopNotification = (title: string, body: string) => {
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification(title, {
         body: body,
-        icon: '/favicon.ico', // Uses your app icon if available
       })
     }
   }
@@ -88,7 +87,7 @@ export function PipelineDashboard() {
     const pollLocalESP32 = async () => {
       if (inFlight) return
       inFlight = true
-      
+     
       try {
         const res = await fetch(`${LOCAL_ESP32_URL}?t=${Date.now()}`, {
           method: 'GET',
@@ -117,14 +116,16 @@ export function PipelineDashboard() {
 
         const transitions: PipelineEvent[] = []
         const wasOffline = isOfflineRef.current
-        
+       
         isOfflineRef.current = false
         if (lastErrorMessage.current || wasOffline) {
           lastErrorMessage.current = null
           transitions.push(createEvent({ level: 'info', message: 'Connection to ESP32 restored' }))
+          sendDesktopNotification('📡 ESP32 Connected', 'Connection to Zone 1 monitoring sensor has been successfully established.')
         }
 
         const nextZones = zonesRef.current.map((zone) => {
+          // 📡 ZONE 1: Responds to your physical device dynamically
           if (zone.index === 1) {
             const vibrationValue = data.vibration ?? 0
             const batteryValue = data.battery ?? 0
@@ -133,7 +134,6 @@ export function PipelineDashboard() {
             const prev = previousStatus.current[zone.id]
             if (prev !== status || wasOffline) {
               previousStatus.current[zone.id] = status
-              
               if (!wasOffline) {
                 transitions.push(
                   createEvent(
@@ -143,16 +143,16 @@ export function PipelineDashboard() {
                   )
                 )
 
-                // 🚨 TRIGGER SYSTEM NOTIFICATION WINDOWS
+                // 🚨 Trigger browser popups cleanly upon live pipeline transitions
                 if (status === 'leak') {
                   sendDesktopNotification(
-                    `🚨 CRITICAL PIPELINE BREAK`, 
-                    `Warning: Critical leak suspected in Zone 1 (${zone.name})! Vibration anomaly: ${vibrationValue} Hz.`
+                    `🚨 LEAK SUSPECTED — Zone 1`, 
+                    `Warning: Vibration anomaly detected on ${zone.name} (${vibrationValue} Hz).`
                   )
                 } else {
                   sendDesktopNotification(
                     `✅ Zone 1 Clear`, 
-                    `Status updated: Zone 1 (${zone.name}) has returned to a safe baseline.`
+                    `${zone.name} pipeline metrics returned to safe baseline values.`
                   )
                 }
               }
@@ -160,11 +160,12 @@ export function PipelineDashboard() {
 
             return { ...zone, status, batteryV: batteryValue, vibrationHz: vibrationValue }
           }
-          
+         
+          // 🛑 ZONE 2 & 3: Forced permanently offline regardless of success states
           previousStatus.current[zone.id] = 'offline'
-          return { 
-            ...zone, 
-            status: 'offline' as ZoneStatus, 
+          return {
+            ...zone,
+            status: 'offline' as ZoneStatus,
             vibrationHz: 0,
             batteryV: 0
           }
@@ -175,32 +176,35 @@ export function PipelineDashboard() {
         pushEvents(transitions.reverse())
       } catch (error: any) {
         if (cancelled) return
-        
+       
         const wasOnline = !isOfflineRef.current
         isOfflineRef.current = true
         reportError(`Offline: ${error.message || 'Check ESP32'}`)
-        
-        // 🚨 CRITICAL NOTIFICATION: Trigger desktop system alert when hardware connection drops out
+
+        // 🚨 Trigger desktop popup the exact second the sensor stream cuts out
         if (wasOnline) {
           sendDesktopNotification(
-            `⚠️ PIPELINE MONITOR OFFLINE`,
-            `Alert: Critical telemetry loss! Connection to Zone 1 ESP32 sensor has been severed.`
+            `⚠️ NODE OFFLINE — Zone 1`,
+            `Telemetry stream frozen. Zone 1 pipeline sensor is unreachable.`
           )
         }
-
+       
+        // 🔒 CRITICAL FIX: Leaves Zones 2 & 3 untouched while shifting Zone 1 cleanly to offline state
         const offlineZones = zonesRef.current.map((zone) => {
           previousStatus.current[zone.id] = 'offline'
-          return { 
-            ...zone, 
-            status: 'offline' as ZoneStatus, 
-            vibrationHz: 0, 
-            batteryV: 0 
+          return {
+            ...zone,
+            status: 'offline' as ZoneStatus,
+            vibrationHz: 0,
+            batteryV: 0
           }
         })
-        
+       
         zonesRef.current = offlineZones
         setZones(offlineZones)
-      } // Removed fill-in-finally/finally since handled implicitly cleanly
+      } finally {
+        inFlight = false
+      }
     }
 
     pollLocalESP32()
