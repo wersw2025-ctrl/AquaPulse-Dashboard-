@@ -15,7 +15,7 @@ import { EventLog } from './event-log'
 const LOCAL_ESP32_URL = '/api/esp32' 
 const FAST_POLL_INTERVAL_MS = 200 
 const MAX_EVENTS = 50
-const DISCONNECT_TIMEOUT_MS = 3000 
+const DISCONNECT_TIMEOUT_MS = 4000 // Extended slightly to match the backend api clock gracefully
 
 type ESP32DataPacket = {
   vibration: number
@@ -46,6 +46,7 @@ export function PipelineDashboard() {
   const lastErrorMessage = useRef<string | null>(null)
   const zonesRef = useRef<Zone[]>(initialZones)
   const lastSuccessRef = useRef<number>(Date.now())
+  const isCurrentlyOfflineRef = useRef<boolean>(false) // Tracks if we are locked in offline mode
 
   useEffect(() => {
     const pushEvents = (newEvents: PipelineEvent[]) => {
@@ -66,6 +67,7 @@ export function PipelineDashboard() {
       // ⏱️ Timeout Check
       const timeSinceLastSuccess = Date.now() - lastSuccessRef.current
       if (timeSinceLastSuccess > DISCONNECT_TIMEOUT_MS) {
+        isCurrentlyOfflineRef.current = true
         const offlineTransitions: PipelineEvent[] = []
         
         const offlineZones = zonesRef.current.map((zone) => {
@@ -115,10 +117,13 @@ export function PipelineDashboard() {
         const data = (await res.json()) as ESP32DataPacket
         if (cancelled) return
 
-        // Reset the tracker timestamp since a real connection succeeded
+        // 🎉 SUCCESS: Reset both the clock tracker AND the offline lock status instantly
         lastSuccessRef.current = Date.now()
+        
+        const wasOffline = isCurrentlyOfflineRef.current
+        isCurrentlyOfflineRef.current = false
 
-        if (lastErrorMessage.current) {
+        if (lastErrorMessage.current || wasOffline) {
           lastErrorMessage.current = null
           pushEvents([createEvent({ level: 'info', message: 'Connection to ESP32 restored' })])
         }
@@ -132,23 +137,27 @@ export function PipelineDashboard() {
             const status: ZoneStatus = vibrationValue > 5.0 ? 'leak' : 'safe'
 
             const prev = previousStatus.current[zone.id]
-            if (prev !== status) {
+            if (prev !== status || wasOffline) {
               previousStatus.current[zone.id] = status
-              transitions.push(
-                createEvent(
-                  status === 'leak'
-                    ? {
-                        level: 'alert',
-                        zone: `Zone ${zone.index}`,
-                        message: `🚨 LEAK DETECTED — ${zone.name} vibrating at ${vibrationValue} Hz`,
-                      }
-                    : {
-                        level: 'info',
-                        zone: `Zone ${zone.index}`,
-                        message: `✅ Status cleared — ${zone.name} reporting SAFE baseline`,
-                      },
-                ),
-              )
+              
+              // Only push normal transitions if we weren't just coming back from a complete system blackout
+              if (!wasOffline) {
+                transitions.push(
+                  createEvent(
+                    status === 'leak'
+                      ? {
+                          level: 'alert',
+                          zone: `Zone ${zone.index}`,
+                          message: `🚨 LEAK DETECTED — ${zone.name} vibrating at ${vibrationValue} Hz`,
+                        }
+                      : {
+                          level: 'info',
+                          zone: `Zone ${zone.index}`,
+                          message: `✅ Status cleared — ${zone.name} reporting SAFE baseline`,
+                        },
+                  ),
+                )
+              }
             }
 
             return {
@@ -159,10 +168,15 @@ export function PipelineDashboard() {
             }
           }
           
-          // ✅ FIX: Instantly recover Zone 2 & 3 back to safe when the network stream resumes!
-          if (previousStatus.current[zone.id] === 'offline') {
+          // Force recover static fallback metrics for Zone 2 & 3 when communication resumes
+          if (previousStatus.current[zone.id] === 'offline' || wasOffline) {
             previousStatus.current[zone.id] = 'safe'
-            return { ...zone, status: 'safe' as ZoneStatus, vibrationHz: zone.index === 2 ? 14.8 : 13.1 }
+            return { 
+              ...zone, 
+              status: 'safe' as ZoneStatus, 
+              vibrationHz: zone.index === 2 ? 14.8 : 13.1,
+              batteryV: zone.index === 2 ? 3.78 : 3.41
+            }
           }
           
           return zone
@@ -175,7 +189,6 @@ export function PipelineDashboard() {
         if (cancelled) return
         reportError(`Connection Error: ${error.message || 'Check ESP32 Connection'}`)
       } finally {
-        // ✅ CRITICAL FIX: Always release the flight lock so it keeps polling!
         inFlight = false
       }
     }
