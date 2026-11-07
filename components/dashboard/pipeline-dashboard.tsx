@@ -129,7 +129,7 @@ export function PipelineDashboard() {
             return { ...zone, status, batteryV: batteryValue, vibrationHz: vibrationValue }
           }
           
-          // 🛑 ZONE 2 & 3: Lock them permanently offline since no hardware exists for them
+          // 🛑 ZONE 2 & 3: Forced permanently offline regardless of success states
           previousStatus.current[zone.id] = 'offline'
           return { 
             ...zone, 
@@ -148,10 +148,15 @@ export function PipelineDashboard() {
         isOfflineRef.current = true
         reportError(`Offline: ${error.message || 'Check ESP32'}`)
         
-        // When Zone 1 crashes, keep it offline along with Zone 2 and Zone 3
+        // 🔒 CRITICAL FIX: Even under errors, explicitly make sure only Zone 1 changes while 2 and 3 stay offline!
         const offlineZones = zonesRef.current.map((zone) => {
           previousStatus.current[zone.id] = 'offline'
-          return { ...zone, status: 'offline' as ZoneStatus, vibrationHz: 0, batteryV: 0 }
+          return { 
+            ...zone, 
+            status: 'offline' as ZoneStatus, 
+            vibrationHz: 0, 
+            batteryV: 0 
+          }
         })
         
         zonesRef.current = offlineZones
