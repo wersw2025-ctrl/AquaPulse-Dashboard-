@@ -1,17 +1,14 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-// ✅ PERFECT CONFIGURATION: Re-anchored right into your active database instance route
 const SUPABASE_URL = 'https://jejXifxvgLlognjpynqc.supabase.co'
 const SUPABASE_ANON_KEY = 'sb_publishable_U7pUJSL9uLKsCHgqcDi_3Q_ffDSTrOT'
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-// 💡 PUSHOVER CREDENTIALS: Paste your specific dashboard keys inside the quotes below
 const PUSHOVER_USER_KEY = 'u9x7yhbpjv64cxo4d6douac9kvuebk'
 const PUSHOVER_API_TOKEN = 'azua6kre9hb6u8rw4x6a7ktyggid34'
 
-// 🚫 FORCE NO CACHE: Always pull fresh live data
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
@@ -19,8 +16,7 @@ async function sendMobilePushNotification(title: string, message: string) {
   if (PUSHOVER_USER_KEY === 'YOUR_PUSHOVER_USER_KEY') return
 
   try {
-    // ✅ FIXED ENDPOINT: Now properly routing to the official Pushover API endpoint
-    await fetch('https://pushover.net', {
+    const res = await fetch('https://pushover.net', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -28,10 +24,11 @@ async function sendMobilePushNotification(title: string, message: string) {
         user: PUSHOVER_USER_KEY,
         title: title,
         message: message,
-        sound: 'siren', // High-priority emergency sound
-        priority: 1     // High priority filter to bypass phone standby sleep deep cycles
+        sound: 'siren', 
+        priority: 1     
       })
     })
+    console.log('Pushover API Response Status:', res.status)
   } catch (err) {
     console.error('Failed to dispatch background mobile push alert:', err)
   }
@@ -39,12 +36,12 @@ async function sendMobilePushNotification(title: string, message: string) {
 
 export async function GET() {
   try {
-    // 🔍 STATELESS OPERATION: Fetch the 2 most recent rows to track real database changes accurately
+    // 🔍 Pull the single absolute latest record
     const { data: records, error } = await supabase
       .from('telemetry')
       .select('vibration, battery, id')
       .order('id', { ascending: false })
-      .limit(2)
+      .limit(1)
 
     if (error || !records || records.length === 0) {
       throw new Error(error?.message || 'No telemetry records found')
@@ -52,32 +49,21 @@ export async function GET() {
 
     const latestRecord = records[0]
     const currentVibration = latestRecord.vibration ?? 0
-    const isCurrentLeak = currentVibration > 5.0
 
-    if (records.length === 2) {
-      const previousRecord = records[1]
-      const previousVibration = previousRecord.vibration ?? 0
-      const wasPreviousLeak = previousVibration > 5.0
-
-      // 🚨 REAL DATABASE TRANSITION CHECKS: Immune to serverless memory resets!
-      if (isCurrentLeak && !wasPreviousLeak) {
-        await sendMobilePushNotification(
-          '🚨 CRITICAL LEAK SUSPECTED',
-          `Zone 1 Pipe Anomaly! Vibration levels spiking at ${currentVibration} Hz.`
-        )
-      } else if (!isCurrentLeak && wasPreviousLeak) {
-        await sendMobilePushNotification(
-          '✅ Zone 1 Safe Status Clear',
-          `Pipeline metrics returned smoothly to an optimal baseline.`
-        )
-      }
+    // 🚨 ABSOLUTE TRIGGER: If it is over 5, send the alert instantly. No transition history required!
+    if (currentVibration > 5.0) {
+      await sendMobilePushNotification(
+        '🚨 CRITICAL LEAK SUSPECTED',
+        `Zone 1 Pipe Anomaly! Vibration levels spiking at ${currentVibration} Hz.`
+      )
     }
 
     return new NextResponse(
       JSON.stringify({
         vibration: latestRecord.vibration,
         battery: latestRecord.battery,
-        rowId: latestRecord.id
+        rowId: latestRecord.id,
+        alertFired: currentVibration > 5.0
       }),
       {
         status: 200,
