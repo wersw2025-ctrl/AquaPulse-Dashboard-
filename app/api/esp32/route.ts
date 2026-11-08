@@ -16,7 +16,7 @@ async function sendMobilePushNotification(title: string, message: string) {
   if (PUSHOVER_USER_KEY === 'YOUR_PUSHOVER_USER_KEY') return
 
   try {
-    const res = await fetch('https://pushover.net', {
+    const res = await fetch('https://api.pushover.net/1/messages.json', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
