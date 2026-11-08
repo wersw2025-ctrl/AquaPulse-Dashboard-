@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-// ✅ PERFECT LOCAL ROUTER ADDRESS KEY DEFINITIONS
+// ✅ LOCKED ACTIVE DATABASE INSTANCE ROUTE
 const SUPABASE_URL = 'https://jejXifxvgLlognjpynqc.supabase.co'
 const SUPABASE_ANON_KEY = 'sb_publishable_U7pUJSL9uLKsCHgqcDi_3Q_ffDSTrOT'
 
@@ -19,21 +19,23 @@ async function sendMobilePushNotification(title: string, message: string, sound:
   if (PUSHOVER_USER_KEY === 'YOUR_PUSHOVER_USER_KEY') return
 
   try {
-    // ✅ PERFECT MESSAGES ENDPOINT LINK CONFIGURATION
-    await fetch('https://api.pushover.net/1/messages.json', {
+    // ✅ FIXED DATA LAYOUT FORMAT: Convert parameters to Form URL-Encoding for Pushover API compatibility
+    const params = new URLSearchParams()
+    params.append('token', PUSHOVER_API_TOKEN)
+    params.append('user', PUSHOVER_USER_KEY)
+    params.append('title', title)
+    params.append('message', message)
+    params.append('sound', sound)
+    params.append('priority', '1')
+    params.append('url', 'https://aqua-pulse-dashboard.vercel.app/')
+
+    const res = await fetch('https://api.pushover.net/1/messages.json', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        token: PUSHOVER_API_TOKEN,
-        user: PUSHOVER_USER_KEY,
-        title: title,
-        message: message,
-        sound: sound, 
-        priority: 1,
-        // ✅ PERFECT TARGET LIVE DASHBOARD REDIRECT LINK
-        url: 'https://aqua-pulse-dashboard.vercel.app/'     
-      })
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
     })
+    
+    console.log('Pushover Server Response Status:', res.status)
   } catch (err) {
     console.error('Pushover notification failure:', err)
   }
