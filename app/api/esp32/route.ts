@@ -28,7 +28,6 @@ async function sendMobilePushNotification(title: string, message: string, sound:
     params.append('priority', '1')
     params.append('url', 'https://aqua-pulse-dashboard.vercel.app/')
 
-    // Direct synchronous fetch out to the main notification gateway
     await fetch('https://api.pushover.net/1/messages.json', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -39,43 +38,57 @@ async function sendMobilePushNotification(title: string, message: string, sound:
   }
 }
 
-// 📡 CLOUD WEBHOOK HANDLER: Fires instantly on every single database entry
+// 📡 CLOUD WEBHOOK HANDLER: Processes database updates when your laptop is completely turned off
 export async function POST(request: Request) {
   try {
-    // Read raw data coming straight from your database insert event
-    let body: any = {}
-    try {
-      body = await request.json()
-    } catch (e) {}
-
-    // Pull the single absolute newest row directly to remove delay calculations
+    // 🔍 Query the 2 most recent rows from the database to evaluate trends
     const { data: records, error } = await supabase
       .from('telemetry')
-      .select('vibration, battery, id')
+      .select('vibration, battery, id, created_at')
       .order('id', { ascending: false })
-      .limit(1)
+      .limit(2)
 
     if (error || !records || records.length === 0) {
-      return new NextResponse('Empty registry', { status: 200 })
+      return new NextResponse('Telemetry log pool empty', { status: 200 })
     }
 
     const latestRecord = records[0]
     const currentVibration = latestRecord.vibration ?? 0
+    const isCurrentLeak = currentVibration > 5.0
+    const currentLogTime = latestRecord.created_at ? new Date(latestRecord.created_at).getTime() : Date.now()
 
-    // 🚨 ABSOLUTE DIRECT TRIGGER: If it is over 5, send the alert instantly!
-    if (currentVibration > 5.0) {
-      await sendMobilePushNotification(
-        '🚨 CRITICAL LEAK SUSPECTED',
-        `Zone 1 Pipe Anomaly! Vibration levels spiking at ${currentVibration} Hz.`,
-        'siren'
-          )
-    } else {
-      // ✅ ABSOLUTE DIRECT TRIGGER: If it is normal, send the safe status clear instantly!
-      await sendMobilePushNotification(
-        '✅ ZONE 1 SAFE STATUS CLEAR',
-        `Pipeline monitor metrics stabilized safely at ${currentVibration} Hz.`,
-        'bugle'
-      )
+    if (records.length === 2) {
+      const previousRecord = records[1]
+      const previousVibration = previousRecord.vibration ?? 0
+      const wasPreviousLeak = previousVibration > 5.0
+      const previousLogTime = previousRecord.created_at ? new Date(previousRecord.created_at).getTime() : currentLogTime
+      const intervalBetweenLogsSeconds = (currentLogTime - previousLogTime) / 1000
+
+      // 🚨 1. LEAK ALERT (Jumped from safe to leaking)
+      if (isCurrentLeak && !wasPreviousLeak) {
+        await sendMobilePushNotification(
+          '🚨 CRITICAL LEAK SUSPECTED',
+          `Zone 1 Pipe Anomaly! Vibration levels spiking at ${currentVibration} Hz.`,
+          'siren'
+        )
+      } 
+      // ✅ 2. LEAK CLEAR (Dropped from leaking back to safe)
+      else if (!isCurrentLeak && wasPreviousLeak) {
+        await sendMobilePushNotification(
+          '✅ ZONE 1 SAFE STATUS CLEAR',
+          `Pipeline monitor metrics stabilized safely at ${currentVibration} Hz.`,
+          'bugle'
+        )
+      }
+
+      // 🟢 3. POWERED ON ALERT (Broke a long period of silence)
+      if (intervalBetweenLogsSeconds > OFFLINE_THRESHOLD_SECONDS) {
+        await sendMobilePushNotification(
+          '🔌 SYSTEM POWERED ON',
+          '🟢 Zone 1 Telemetry Online: Connection established and system power verified.',
+          'mechanical'
+        )
+      }
     }
 
     return new NextResponse(JSON.stringify({ success: true }), { status: 200 })
@@ -103,27 +116,17 @@ export async function GET() {
     const isOffline = timeSinceLastUpdateSeconds > OFFLINE_THRESHOLD_SECONDS
 
     if (isOffline) {
-      // 🔴 POWERED OFF ALERTS
-      await sendMobilePushNotification(
-        '🔌 SYSTEM POWERED OFF',
-        '🔴 Warning: Zone 1 Telemetry Offline. Sensor transmission dropped.',
-        'falling'
-      )
-    } else {
-      // 🟢 POWERED ON ALERTS
+      // 🔴 4. POWERED OFF ALERTS WITH SINGLE MEMORY LOCK
       const globalObj = global as any
-      if (globalObj.wasLastKnownOffline) {
+      if (!globalObj.lastOfflineAlertId || globalObj.lastOfflineAlertId !== latestRecord.id) {
         await sendMobilePushNotification(
-          '🔌 SYSTEM POWERED ON',
-          '🟢 Zone 1 Telemetry Online: Connection established and system power verified.',
-          'mechanical'
+          '🔌 SYSTEM POWERED OFF',
+          '🔴 Warning: Zone 1 Telemetry Offline. Sensor transmission dropped.',
+          'falling'
         )
-        globalObj.wasLastKnownOffline = false
+        globalObj.lastOfflineAlertId = latestRecord.id
       }
     }
-
-    // Save tracking state to memory
-    ;(global as any).wasLastKnownOffline = isOffline
 
     return new NextResponse(
       JSON.stringify({
