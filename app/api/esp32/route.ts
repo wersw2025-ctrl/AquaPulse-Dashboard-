@@ -39,17 +39,14 @@ async function sendMobilePushNotification(title: string, message: string, sound:
 
 export async function POST(request: Request) {
   try {
-    // 🔍 Step 1: Safely capture incoming data direct from Supabase Webhook body or query
     let webhookRecord: any = null
     try {
       const body = await request.json()
-      // If triggered by a real Supabase Webhook, row data lives inside .record
       webhookRecord = body.record || body
     } catch {
       // Fallback
     }
 
-    // 🔍 Step 2: Query the 2 most recent rows from the database to evaluate trends
     const { data: records, error } = await supabase
       .from('telemetry')
       .select('vibration, battery, id, created_at')
@@ -60,7 +57,6 @@ export async function POST(request: Request) {
       return new NextResponse('No telemetry records found', { status: 200 })
     }
 
-    // ✅ FIXED ELEMENT EXTRACTIONS: Explicitly selecting index [0] and [1] to ensure data isn't undefined
     const latestRecord = records[0]
     const currentVibration = latestRecord.vibration ?? 0
     const isCurrentLeak = currentVibration > 5.0
@@ -110,33 +106,62 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    const { data: records } = await supabase
+    const { data: records, error } = await supabase
       .from('telemetry')
       .select('created_at, id, vibration, battery')
       .order('id', { ascending: false })
       .limit(1)
 
-    if (records && records.length > 0) {
-      const latestRecord = records[0]
-      const currentLogTime = latestRecord.created_at ? new Date(latestRecord.created_at).getTime() : Date.now()
-      const timeSinceLastUpdateSeconds = (Date.now() - currentLogTime) / 1000
+    if (error || !records || records.length === 0) {
+      throw new Error('No telemetry data available')
+    }
 
-      if (timeSinceLastUpdateSeconds > OFFLINE_THRESHOLD_SECONDS) {
-        // We look at Vercel memory logs dynamically
-        const globalObj = global as any
-        if (!globalObj.lastOfflineAlertId || globalObj.lastOfflineAlertId !== latestRecord.id) {
-          await sendMobilePushNotification(
-            '🔌 SYSTEM POWERED OFF',
-            '🔴 Warning: Zone 1 Telemetry Offline. Sensor transmission dropped.',
-            'falling'
-          )
-          globalObj.lastOfflineAlertId = latestRecord.id
-        }
-        return NextResponse.json({ status: 'offline', ...latestRecord })
+    const latestRecord = records[0]
+    const currentLogTime = latestRecord.created_at ? new Date(latestRecord.created_at).getTime() : Date.now()
+    const timeSinceLastUpdateSeconds = (Date.now() - currentLogTime) / 1000
+
+    // Check if the device is currently missing data sequences
+    const isOffline = timeSinceLastUpdateSeconds > OFFLINE_THRESHOLD_SECONDS
+
+    if (isOffline) {
+      const globalObj = global as any
+      if (!globalObj.lastOfflineAlertId || globalObj.lastOfflineAlertId !== latestRecord.id) {
+        await sendMobilePushNotification(
+          '🔌 SYSTEM POWERED OFF',
+          '🔴 Warning: Zone 1 Telemetry Offline. Sensor transmission dropped.',
+          'falling'
+        )
+        globalObj.lastOfflineAlertId = latestRecord.id
       }
     }
-    return NextResponse.json({ status: 'online', ...(records ? records[0] : {}) })
-  } catch {
-    return new NextResponse('Internal error', { status: 500 })
+
+    // ✅ FIXED RESPONSE OBJECT STRUCTURE: Sending back your clean parameters so your dashboard stays green!
+    return new NextResponse(
+      JSON.stringify({
+        vibration: latestRecord.vibration,
+        battery: latestRecord.battery,
+        rowId: latestRecord.id,
+        alertFired: (latestRecord.vibration ?? 0) > 5.0,
+        status: isOffline ? 'offline' : 'online'
+      }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        },
+      }
+    )
+  } catch (error: any) {
+    return new NextResponse(
+      JSON.stringify({ error: error.message }),
+      {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        },
+      }
+    )
   }
 }
