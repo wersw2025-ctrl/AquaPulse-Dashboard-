@@ -29,7 +29,7 @@ async function sendMobilePushNotification(title: string, message: string, sound:
         message: message,
         sound: sound, 
         priority: 1,
-        url: 'https://your-actual-deployed-dashboard-link-here.com'     
+        url: 'https://aqua-pulse-dashboard.vercel.app/'     
       })
     })
   } catch (err) {
