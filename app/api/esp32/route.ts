@@ -38,10 +38,9 @@ async function sendMobilePushNotification(title: string, message: string, sound:
   }
 }
 
-// 📡 CLOUD WEBHOOK HANDLER: Processes database updates when your laptop is completely turned off
+// 📡 CLOUD WEBHOOK HANDLER: Fires automatically when a new row arrives
 export async function POST(request: Request) {
   try {
-    // 🔍 Query the 2 most recent rows from the database to evaluate trends
     const { data: records, error } = await supabase
       .from('telemetry')
       .select('vibration, battery, id, created_at')
@@ -57,6 +56,11 @@ export async function POST(request: Request) {
     const isCurrentLeak = currentVibration > 5.0
     const currentLogTime = latestRecord.created_at ? new Date(latestRecord.created_at).getTime() : Date.now()
 
+    // Fetch persistent database tracker states
+    const { data: stateTrackers } = await supabase.from('alert_state').select('*')
+    const leakState = stateTrackers?.find(s => s.id === 'leak')
+    const powerState = stateTrackers?.find(s => s.id === 'power')
+
     if (records.length === 2) {
       const previousRecord = records[1]
       const previousVibration = previousRecord.vibration ?? 0
@@ -64,30 +68,33 @@ export async function POST(request: Request) {
       const previousLogTime = previousRecord.created_at ? new Date(previousRecord.created_at).getTime() : currentLogTime
       const intervalBetweenLogsSeconds = (currentLogTime - previousLogTime) / 1000
 
-      // 🚨 1. LEAK ALERT (Jumped from safe to leaking)
-      if (isCurrentLeak && !wasPreviousLeak) {
+      // 🚨 1. LEAK ALERT (Fires when turning from safe to leaking)
+      if (isCurrentLeak && (!wasPreviousLeak || leakState?.status_value !== 'leaking')) {
         await sendMobilePushNotification(
           '🚨 CRITICAL LEAK SUSPECTED',
           `Zone 1 Pipe Anomaly! Vibration levels spiking at ${currentVibration} Hz.`,
           'siren'
         )
+        await supabase.from('alert_state').update({ status_value: 'leaking', last_notified_id: latestRecord.id }).eq('id', 'leak')
       } 
-      // ✅ 2. LEAK CLEAR (Dropped from leaking back to safe)
-      else if (!isCurrentLeak && wasPreviousLeak) {
+      // ✅ 2. LEAK SAFE STATUS CLEAR
+      else if (!isCurrentLeak && (wasPreviousLeak || leakState?.status_value === 'leaking')) {
         await sendMobilePushNotification(
           '✅ ZONE 1 SAFE STATUS CLEAR',
           `Pipeline monitor metrics stabilized safely at ${currentVibration} Hz.`,
           'bugle'
         )
+        await supabase.from('alert_state').update({ status_value: 'safe', last_notified_id: latestRecord.id }).eq('id', 'leak')
       }
 
-      // 🟢 3. POWERED ON ALERT (Broke a long period of silence)
-      if (intervalBetweenLogsSeconds > OFFLINE_THRESHOLD_SECONDS) {
+      // 🟢 3. POWERED ON ALERT
+      if (intervalBetweenLogsSeconds > OFFLINE_THRESHOLD_SECONDS || powerState?.status_value === 'offline') {
         await sendMobilePushNotification(
           '🔌 SYSTEM POWERED ON',
           '🟢 Zone 1 Telemetry Online: Connection established and system power verified.',
           'mechanical'
         )
+        await supabase.from('alert_state').update({ status_value: 'online', last_notified_id: latestRecord.id }).eq('id', 'power')
       }
     }
 
@@ -97,7 +104,7 @@ export async function POST(request: Request) {
   }
 }
 
-// 💻 WEB DASHBOARD HANDLER: Handles browser requests and watches for drops in power states
+// 💻 WEB DASHBOARD HANDLER: Provides the frontend stream interface
 export async function GET() {
   try {
     const { data: records, error } = await supabase
@@ -115,16 +122,19 @@ export async function GET() {
     const timeSinceLastUpdateSeconds = (Date.now() - currentLogTime) / 1000
     const isOffline = timeSinceLastUpdateSeconds > OFFLINE_THRESHOLD_SECONDS
 
+    // Read power state tracker from the database
+    const { data: powerState } = await supabase.from('alert_state').select('status_value, last_notified_id').eq('id', 'power').single()
+
     if (isOffline) {
-      // 🔴 4. POWERED OFF ALERTS WITH SINGLE MEMORY LOCK
-      const globalObj = global as any
-      if (!globalObj.lastOfflineAlertId || globalObj.lastOfflineAlertId !== latestRecord.id) {
+      // 🔴 4. POWERED OFF ALERTS (Triggers once when silence window crosses)
+      if (powerState?.status_value !== 'offline' && powerState?.last_notified_id !== latestRecord.id) {
         await sendMobilePushNotification(
           '🔌 SYSTEM POWERED OFF',
           '🔴 Warning: Zone 1 Telemetry Offline. Sensor transmission dropped.',
           'falling'
         )
-        globalObj.lastOfflineAlertId = latestRecord.id
+        // Store offline event lock markers inside the database rows
+        await supabase.from('alert_state').update({ status_value: 'offline', last_notified_id: latestRecord.id }).eq('id', 'power')
       }
     }
 
