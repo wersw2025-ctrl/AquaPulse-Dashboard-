@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+// ✅ PERFECT LOCAL ROUTER ADDRESS KEY DEFINITIONS
 const SUPABASE_URL = 'https://jejXifxvgLlognjpynqc.supabase.co'
 const SUPABASE_ANON_KEY = 'sb_publishable_U7pUJSL9uLKsCHgqcDi_3Q_ffDSTrOT'
 
@@ -12,13 +13,13 @@ const PUSHOVER_API_TOKEN = 'azua6kre9hb6u8rw4x6a7ktyggid34'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-// ⏱️ TIMEOUT CONFIGURATION
 const OFFLINE_THRESHOLD_SECONDS = 30 
 
 async function sendMobilePushNotification(title: string, message: string, sound: string = 'siren') {
   if (PUSHOVER_USER_KEY === 'YOUR_PUSHOVER_USER_KEY') return
 
   try {
+    // ✅ PERFECT MESSAGES ENDPOINT LINK CONFIGURATION
     await fetch('https://api.pushover.net/1/messages.json', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -29,24 +30,18 @@ async function sendMobilePushNotification(title: string, message: string, sound:
         message: message,
         sound: sound, 
         priority: 1,
+        // ✅ PERFECT TARGET LIVE DASHBOARD REDIRECT LINK
         url: 'https://aqua-pulse-dashboard.vercel.app/'     
       })
     })
   } catch (err) {
-    console.error('Pushover alert failure:', err)
+    console.error('Pushover notification failure:', err)
   }
 }
 
+// 📡 CLOUD WEBHOOK HANDLER: Processes database updates when your laptop is completely turned off
 export async function POST(request: Request) {
   try {
-    let webhookRecord: any = null
-    try {
-      const body = await request.json()
-      webhookRecord = body.record || body
-    } catch {
-      // Fallback
-    }
-
     const { data: records, error } = await supabase
       .from('telemetry')
       .select('vibration, battery, id, created_at')
@@ -54,24 +49,22 @@ export async function POST(request: Request) {
       .limit(2)
 
     if (error || !records || records.length === 0) {
-      return new NextResponse('No telemetry records found', { status: 200 })
+      return new NextResponse('Telemetry log pool empty', { status: 200 })
     }
 
     const latestRecord = records[0]
     const currentVibration = latestRecord.vibration ?? 0
     const isCurrentLeak = currentVibration > 5.0
-
     const currentLogTime = latestRecord.created_at ? new Date(latestRecord.created_at).getTime() : Date.now()
 
     if (records.length === 2) {
       const previousRecord = records[1]
       const previousVibration = previousRecord.vibration ?? 0
       const wasPreviousLeak = previousVibration > 5.0
-
       const previousLogTime = previousRecord.created_at ? new Date(previousRecord.created_at).getTime() : currentLogTime
       const intervalBetweenLogsSeconds = (currentLogTime - previousLogTime) / 1000
 
-      // 🚨 1. LEAK ALERT
+      // 🚨 Leak Alert
       if (isCurrentLeak && !wasPreviousLeak) {
         await sendMobilePushNotification(
           '🚨 CRITICAL LEAK SUSPECTED',
@@ -79,7 +72,7 @@ export async function POST(request: Request) {
           'siren'
         )
       } 
-      // ✅ 2. LEAK CLEAR
+      // ✅ Leak Clear
       else if (!isCurrentLeak && wasPreviousLeak) {
         await sendMobilePushNotification(
           '✅ ZONE 1 SAFE STATUS CLEAR',
@@ -88,7 +81,7 @@ export async function POST(request: Request) {
         )
       }
 
-      // 🟢 3. POWERED ON
+      // 🟢 Sensor Powered On
       if (intervalBetweenLogsSeconds > OFFLINE_THRESHOLD_SECONDS) {
         await sendMobilePushNotification(
           '🔌 SYSTEM POWERED ON',
@@ -104,6 +97,7 @@ export async function POST(request: Request) {
   }
 }
 
+// 💻 WEB DASHBOARD HANDLER: Provides the real-time parameter streaming interface
 export async function GET() {
   try {
     const { data: records, error } = await supabase
@@ -119,10 +113,9 @@ export async function GET() {
     const latestRecord = records[0]
     const currentLogTime = latestRecord.created_at ? new Date(latestRecord.created_at).getTime() : Date.now()
     const timeSinceLastUpdateSeconds = (Date.now() - currentLogTime) / 1000
-
-    // Check if the device is currently missing data sequences
     const isOffline = timeSinceLastUpdateSeconds > OFFLINE_THRESHOLD_SECONDS
 
+    // 🔴 Sensor Powered Off
     if (isOffline) {
       const globalObj = global as any
       if (!globalObj.lastOfflineAlertId || globalObj.lastOfflineAlertId !== latestRecord.id) {
@@ -135,7 +128,6 @@ export async function GET() {
       }
     }
 
-    // ✅ FIXED RESPONSE OBJECT STRUCTURE: Sending back your clean parameters so your dashboard stays green!
     return new NextResponse(
       JSON.stringify({
         vibration: latestRecord.vibration,
@@ -153,15 +145,6 @@ export async function GET() {
       }
     )
   } catch (error: any) {
-    return new NextResponse(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-        },
-      }
-    )
+    return new NextResponse(JSON.stringify({ error: error.message }), { status: 500 })
   }
 }
