@@ -1,4 +1,62 @@
 import { NextResponse } from 'next/server'
+
+const PUSHOVER_USER_KEY = 'u9x7yhbpjv64cxo4d6douac9kvuebk'
+const PUSHOVER_API_TOKEN = 'azua6kre9hb6u8rw4x6a7ktyggid34'
+
+async function sendMobilePushNotification(title: string, message: string, sound: string = 'siren') {
+  if (PUSHOVER_USER_KEY === 'YOUR_PUSHOVER_USER_KEY') return
+
+  try {
+    await fetch('https://api.pushover.net/1/messages.json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: PUSHOVER_API_TOKEN,
+        user: PUSHOVER_USER_KEY,
+        title: title,
+        message: message,
+        sound: sound, 
+        priority: 1,
+        url: 'https://aqua-pulse-dashboard.vercel.app'     
+      })
+    })
+  } catch (err) {
+    console.error('Pushover alert failure:', err)
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json()
+    
+    // Supabase Webhooks pass the row data inside the 'record' property
+    const newRecord = body.record
+    if (!newRecord) return new NextResponse('No record found', { status: 400 })
+
+    const currentVibration = newRecord.vibration ?? 0
+
+    // 🚨 INSTANT LEAK DETECTION
+    if (currentVibration > 5.0) {
+      await sendMobilePushNotification(
+        '🚨 CRITICAL LEAK SUSPECTED',
+        `Zone 1 Pipe Anomaly! Vibration levels spiking at ${currentVibration} Hz.`,
+        'siren'
+      )
+    }
+
+    return new NextResponse(JSON.stringify({ success: true }), { status: 200 })
+  } catch (error: any) {
+    return new NextResponse(JSON.stringify({ error: error.message }), { status: 500 })
+  }
+}
+
+
+
+
+
+
+
+import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 const SUPABASE_URL = 'https://jejXifxvgLlognjpynqc.supabase.co'
@@ -12,8 +70,8 @@ const PUSHOVER_API_TOKEN = 'azua6kre9hb6u8rw4x6a7ktyggid34'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-// ⏱️ TIMEOUT CONFIGURATION: Defines how many seconds of silence means "Offline"
-const OFFLINE_THRESHOLD_SECONDS = 20 
+// ⏱️ TIMEOUT CONFIGURATION: If the gap between sensor entries is wider than this, it means it woke up from being off.
+const OFFLINE_THRESHOLD_SECONDS = 30 
 
 async function sendMobilePushNotification(title: string, message: string, sound: string = 'siren') {
   if (PUSHOVER_USER_KEY === 'YOUR_PUSHOVER_USER_KEY') return
@@ -33,13 +91,13 @@ async function sendMobilePushNotification(title: string, message: string, sound:
       })
     })
   } catch (err) {
-    console.error('Failed to dispatch background mobile push alert:', err)
+    console.error('Pushover alert failure:', err)
   }
 }
 
-export async function GET() {
+export async function POST(request: Request) {
   try {
-    // 🔍 Fetch the 2 most recent rows including the timestamp column
+    // 🔍 Step 1: Grab the 2 most recent rows from the database to evaluate state history
     const { data: records, error } = await supabase
       .from('telemetry')
       .select('vibration, battery, id, created_at')
@@ -47,104 +105,88 @@ export async function GET() {
       .limit(2)
 
     if (error || !records || records.length === 0) {
-      throw new Error(error?.message || 'No telemetry records found')
+      return new NextResponse('No telemetry records found', { status: 200 })
     }
 
     const latestRecord = records[0]
     const currentVibration = latestRecord.vibration ?? 0
     const isCurrentLeak = currentVibration > 5.0
-    
-    // Parse timestamps safely
+
+    // Safely extract the time the row was inserted
     const currentLogTime = latestRecord.created_at ? new Date(latestRecord.created_at).getTime() : Date.now()
-    const timeSinceLastUpdateSeconds = (Date.now() - currentLogTime) / 1000
-
-    // Evaluate the absolute live state right now based on system clock window
-    const isLiveCurrentlyOffline = timeSinceLastUpdateSeconds > OFFLINE_THRESHOLD_SECONDS
-
-    let shouldNotifyLeak = false
-    let shouldNotifyStatusChange = false
-    let statusMessage = ''
 
     if (records.length === 2) {
       const previousRecord = records[1]
       const previousVibration = previousRecord.vibration ?? 0
       const wasPreviousLeak = previousVibration > 5.0
-      
+
       const previousLogTime = previousRecord.created_at ? new Date(previousRecord.created_at).getTime() : currentLogTime
       const intervalBetweenLogsSeconds = (currentLogTime - previousLogTime) / 1000
 
-      // 🚨 1. LEAK DETECTION (Only fire on transition from dry to wet)
+      // 🚨 1. INSTANT LEAK ALERT (Jumped from safe to leaking)
       if (isCurrentLeak && !wasPreviousLeak) {
-        shouldNotifyLeak = true
+        await sendMobilePushNotification(
+          '🚨 CRITICAL LEAK SUSPECTED',
+          `Zone 1 Pipe Anomaly! Vibration levels spiking at ${currentVibration} Hz.`,
+          'siren'
+        )
+      } 
+      // ✅ 2. LEAK BECOMES STABLE / CLEAR (Dropped from leaking back to safe)
+      else if (!isCurrentLeak && wasPreviousLeak) {
+        await sendMobilePushNotification(
+          '✅ ZONE 1 SAFE STATUS CLEAR',
+          'Pipeline monitor metrics returned smoothly to an optimal baseline.',
+          'bugle'
+        )
       }
 
-      // 🟢 2. ONE-TIME ONLINE TRANSITION
-      // Fire ONLY if the latest log just broke a long period of silence, AND the page is checking it fresh
-      if (!isLiveCurrentlyOffline && intervalBetweenLogsSeconds > OFFLINE_THRESHOLD_SECONDS) {
-        // We use the ID difference to ensure we only report this once per actual database transition row
-        const sessionLockKey = `online_alert_fired_${latestRecord.id}`
-        // Using global memory mapping to block loop repetition
-        if (!(global as any)[sessionLockKey]) {
-          shouldNotifyStatusChange = true
-          statusMessage = '🟢 Zone 1 Telemetry Online: Connection established and system power verified.'
-          ;(global as any)[sessionLockKey] = true
-        }
+      // 🟢 3. TURNED ON / POWERED ON ALERT
+      // If the time gap between the previous record and this new record is huge, the device was off!
+      if (intervalBetweenLogsSeconds > OFFLINE_THRESHOLD_SECONDS) {
+        await sendMobilePushNotification(
+          '🔌 SYSTEM POWERED ON',
+          '🟢 Zone 1 Telemetry Online: Connection established and system power verified.',
+          'mechanical'
+        )
       }
+    }
 
-      // 🔴 3. ONE-TIME OFFLINE TRANSITION
-      if (isLiveCurrentlyOffline) {
+    return new NextResponse(JSON.stringify({ success: true }), { status: 200 })
+  } catch (error: any) {
+    return new NextResponse(JSON.stringify({ error: error.message }), { status: 500 })
+  }
+}
+
+// 🔴 4. TURNED OFF / POWERED OFF DETECTOR
+// Since an offline device can't send rows, we keep a fast GET route active so the dashboard's loop checks the time age.
+export async function GET() {
+  try {
+    const { data: records } = await supabase
+      .from('telemetry')
+      .select('created_at, id')
+      .order('id', { ascending: false })
+      .limit(1)
+
+    if (records && records.length > 0) {
+      const latestRecord = records[0]
+      const currentLogTime = latestRecord.created_at ? new Date(latestRecord.created_at).getTime() : Date.now()
+      const timeSinceLastUpdateSeconds = (Date.now() - currentLogTime) / 1000
+
+      if (timeSinceLastUpdateSeconds > OFFLINE_THRESHOLD_SECONDS) {
         const sessionLockKey = `offline_alert_fired_${latestRecord.id}`
         if (!(global as any)[sessionLockKey]) {
-          shouldNotifyStatusChange = true
-          statusMessage = '🔴 Warning: Zone 1 Telemetry Offline. Sensor transmission dropped.'
+          await sendMobilePushNotification(
+            '🔌 SYSTEM POWERED OFF',
+            '🔴 Warning: Zone 1 Telemetry Offline. Sensor transmission dropped.',
+            'falling'
+          )
           ;(global as any)[sessionLockKey] = true
         }
+        return NextResponse.json({ status: 'offline' })
       }
-    } else {
-      if (isCurrentLeak) shouldNotifyLeak = true
     }
-
-    // Execution Block for Notifications
-    if (shouldNotifyLeak) {
-      await sendMobilePushNotification(
-        '🚨 CRITICAL LEAK SUSPECTED',
-        `Zone 1 Pipe Anomaly! Vibration levels spiking at ${currentVibration} Hz.`,
-        'siren'
-      )
-    } else if (shouldNotifyStatusChange) {
-      await sendMobilePushNotification(
-        '🔌 SYSTEM STATUS ALTERATION',
-        statusMessage,
-        'mechanical'
-      )
-    }
-
-    return new NextResponse(
-      JSON.stringify({
-        vibration: latestRecord.vibration,
-        battery: latestRecord.battery,
-        rowId: latestRecord.id,
-        alertFired: isCurrentLeak,
-        status: isLiveCurrentlyOffline ? 'offline' : 'online'
-      }),
-      {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
-        },
-      }
-    )
-  } catch (error: any) {
-    return new NextResponse(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-        },
-      }
-    )
+    return NextResponse.json({ status: 'online' })
+  } catch {
+    return new NextResponse('Internal error', { status: 500 })
   }
 }
