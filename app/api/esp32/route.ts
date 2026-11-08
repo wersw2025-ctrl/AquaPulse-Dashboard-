@@ -29,7 +29,6 @@ async function sendMobilePushNotification(title: string, message: string, sound:
         message: message,
         sound: sound, 
         priority: 1,
-        // 🔗 URL REDIRECT: Tapping your mobile notification opens your web panel dashboard link directly
         url: 'https://your-actual-deployed-dashboard-link-here.com'     
       })
     })
@@ -40,7 +39,7 @@ async function sendMobilePushNotification(title: string, message: string, sound:
 
 export async function GET() {
   try {
-    // 🔍 Fetch the 2 most recent rows including the newly added timestamp column
+    // 🔍 Fetch the 2 most recent rows including the timestamp column
     const { data: records, error } = await supabase
       .from('telemetry')
       .select('vibration, battery, id, created_at')
@@ -55,11 +54,13 @@ export async function GET() {
     const currentVibration = latestRecord.vibration ?? 0
     const isCurrentLeak = currentVibration > 5.0
     
-    // Parse timestamps safely (Fallback to current system clock if database value is null)
+    // Parse timestamps safely
     const currentLogTime = latestRecord.created_at ? new Date(latestRecord.created_at).getTime() : Date.now()
     const timeSinceLastUpdateSeconds = (Date.now() - currentLogTime) / 1000
 
-    let deviceStatus = 'online'
+    // Evaluate the absolute live state right now based on system clock window
+    const isLiveCurrentlyOffline = timeSinceLastUpdateSeconds > OFFLINE_THRESHOLD_SECONDS
+
     let shouldNotifyLeak = false
     let shouldNotifyStatusChange = false
     let statusMessage = ''
@@ -72,28 +73,35 @@ export async function GET() {
       const previousLogTime = previousRecord.created_at ? new Date(previousRecord.created_at).getTime() : currentLogTime
       const intervalBetweenLogsSeconds = (currentLogTime - previousLogTime) / 1000
 
-      // 🚨 1. LEAK DETECTION (Anti-spam rate limit logic)
+      // 🚨 1. LEAK DETECTION (Only fire on transition from dry to wet)
       if (isCurrentLeak && !wasPreviousLeak) {
         shouldNotifyLeak = true
       }
 
-      // 🟢 2. POWERED ON DETECTION
-      // If the interval between the last two logs was huge, it means the device was powered down and just woke up
-      if (intervalBetweenLogsSeconds > OFFLINE_THRESHOLD_SECONDS) {
-        shouldNotifyStatusChange = true
-        statusMessage = '🟢 Zone 1 Telemetry Online: Connection established and system power verified.'
+      // 🟢 2. ONE-TIME ONLINE TRANSITION
+      // Fire ONLY if the latest log just broke a long period of silence, AND the page is checking it fresh
+      if (!isLiveCurrentlyOffline && intervalBetweenLogsSeconds > OFFLINE_THRESHOLD_SECONDS) {
+        // We use the ID difference to ensure we only report this once per actual database transition row
+        const sessionLockKey = `online_alert_fired_${latestRecord.id}`
+        // Using global memory mapping to block loop repetition
+        if (!(global as any)[sessionLockKey]) {
+          shouldNotifyStatusChange = true
+          statusMessage = '🟢 Zone 1 Telemetry Online: Connection established and system power verified.'
+          ;(global as any)[sessionLockKey] = true
+        }
+      }
+
+      // 🔴 3. ONE-TIME OFFLINE TRANSITION
+      if (isLiveCurrentlyOffline) {
+        const sessionLockKey = `offline_alert_fired_${latestRecord.id}`
+        if (!(global as any)[sessionLockKey]) {
+          shouldNotifyStatusChange = true
+          statusMessage = '🔴 Warning: Zone 1 Telemetry Offline. Sensor transmission dropped.'
+          ;(global as any)[sessionLockKey] = true
+        }
       }
     } else {
       if (isCurrentLeak) shouldNotifyLeak = true
-    }
-
-    // 🔴 3. POWERED OFF DETECTION
-    // If the browser checks the page and no data has arrived within our window limit, mark it dead
-    if (timeSinceLastUpdateSeconds > OFFLINE_THRESHOLD_SECONDS) {
-      deviceStatus = 'offline'
-      // Only alert if the endpoint isn't already registering an offline state downstream
-      shouldNotifyStatusChange = true
-      statusMessage = '🔴 Warning: Zone 1 Telemetry Offline. Sensor transmission dropped.'
     }
 
     // Execution Block for Notifications
@@ -117,7 +125,7 @@ export async function GET() {
         battery: latestRecord.battery,
         rowId: latestRecord.id,
         alertFired: isCurrentLeak,
-        status: deviceStatus
+        status: isLiveCurrentlyOffline ? 'offline' : 'online'
       }),
       {
         status: 200,
