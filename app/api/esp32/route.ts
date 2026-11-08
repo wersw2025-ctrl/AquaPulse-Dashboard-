@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 // ⏱️ TIMEOUT CONFIGURATION: Defines how many seconds of silence means "Offline"
-const OFFLINE_THRESHOLD_SECONDS = 30 
+const OFFLINE_THRESHOLD_SECONDS = 25 
 
 async function sendMobilePushNotification(title: string, message: string, sound: string = 'siren') {
   if (PUSHOVER_USER_KEY === 'YOUR_PUSHOVER_USER_KEY') return
